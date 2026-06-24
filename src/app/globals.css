@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+:root {
+  --background: #120f0a;
+  --foreground: #f4eee2;
+  --ink: #120f0a;
+  --carbon: #080705;
+  --ivory: #f4eee2;
+  --bone: #cfc2ad;
+  --copper: #d87932;
+  --ember: #f08a38;
+  --chartreuse: #d7ff5f;
+  --olive: #768f21;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-ink: var(--ink);
+  --color-carbon: var(--carbon);
+  --color-ivory: var(--ivory);
+  --color-bone: var(--bone);
+  --color-copper: var(--copper);
+  --color-ember: var(--ember);
+  --color-chartreuse: var(--chartreuse);
+  --color-olive: var(--olive);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+body::before {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  content: "";
+  background:
+    radial-gradient(circle at 18% 10%, rgb(216 121 50 / 0.16), transparent 30rem),
+    radial-gradient(circle at 82% 4%, rgb(215 255 95 / 0.09), transparent 27rem),
+    linear-gradient(rgb(244 238 226 / 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(244 238 226 / 0.028) 1px, transparent 1px);
+  background-size:
+    auto,
+    auto,
+    72px 72px,
+    72px 72px;
+}
+
+::selection {
+  background: var(--chartreuse);
+  color: var(--ink);
+}
+
+button,
+a,
+input,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
