@@ -1,5 +1,4 @@
 import { collections } from "@/config/collections";
-import { offers, tokens } from "@/lib/marketplace/fixtures";
 import type {
   CollectionId,
   MarketOffer,
@@ -8,6 +7,11 @@ import type {
   OfferKind,
   SortKey,
 } from "@/lib/marketplace/types";
+import {
+  fetchRandomWalkMarketplaceOffers,
+  fetchRandomWalkMetadata,
+  fetchRandomWalkTokenDetail,
+} from "@/lib/marketplace/random-walk-live";
 
 const collectionIds = new Set(collections.map((collection) => collection.id));
 const offerKinds = new Set(["buy", "sell"]);
@@ -39,11 +43,19 @@ export function parseMarketplaceSearchParams(
       collection && collectionIds.has(collection as CollectionId)
         ? (collection as CollectionId)
         : "all",
-    kind: kind && offerKinds.has(kind as OfferKind) ? (kind as OfferKind) : "all",
+    kind:
+      kind && offerKinds.has(kind as OfferKind)
+        ? (kind as OfferKind)
+        : firstValue(params.filter) === "buy"
+          ? "buy"
+          : firstValue(params.filter) === "sell"
+            ? "sell"
+            : "sell",
     query: firstValue(params.query)?.trim() || undefined,
     min: parseNumber(params.min),
     max: parseNumber(params.max),
-    sort: sort && sortKeys.has(sort as SortKey) ? (sort as SortKey) : "price-asc",
+    sort:
+      sort && sortKeys.has(sort as SortKey) ? (sort as SortKey) : "price-asc",
   };
 }
 
@@ -81,7 +93,10 @@ export function filterOffers(
   });
 }
 
-export function sortOffers(allOffers: MarketOffer[], sort: SortKey = "price-asc") {
+export function sortOffers(
+  allOffers: MarketOffer[],
+  sort: SortKey = "price-asc",
+) {
   return [...allOffers].sort((left, right) => {
     if (sort === "price-desc") {
       return right.priceEth - left.priceEth;
@@ -97,11 +112,23 @@ export function sortOffers(allOffers: MarketOffer[], sort: SortKey = "price-asc"
   });
 }
 
-export function getMarketplaceOffers(search: MarketplaceSearchParams) {
+export async function getMarketplaceOffers(search: MarketplaceSearchParams) {
+  const requestedKind =
+    search.kind && search.kind !== "all" ? search.kind : "sell";
+  const offers =
+    search.kind === "all"
+      ? [
+          ...(await fetchRandomWalkMarketplaceOffers("sell", search.sort)),
+          ...(await fetchRandomWalkMarketplaceOffers("buy", search.sort)),
+        ]
+      : await fetchRandomWalkMarketplaceOffers(requestedKind, search.sort);
+
   return sortOffers(filterOffers(offers, search), search.sort);
 }
 
-export function getMarketplaceStats(allOffers: MarketOffer[]): MarketplaceStats {
+export function getMarketplaceStats(
+  allOffers: MarketOffer[],
+): MarketplaceStats {
   return {
     totalOffers: allOffers.length,
     lowestPrice: allOffers.length
@@ -115,14 +142,36 @@ export function getMarketplaceStats(allOffers: MarketOffer[]): MarketplaceStats 
   };
 }
 
-export function getToken(collectionId: CollectionId, tokenId: number) {
-  return tokens.find(
-    (token) => token.collectionId === collectionId && token.tokenId === tokenId,
-  );
+export async function getToken(collectionId: CollectionId, tokenId: number) {
+  if (collectionId !== "random-walk") {
+    return undefined;
+  }
+
+  try {
+    return (await fetchRandomWalkTokenDetail(tokenId)).token;
+  } catch {
+    return fetchRandomWalkMetadata(tokenId);
+  }
 }
 
-export function getOffersForToken(collectionId: CollectionId, tokenId: number) {
-  return offers.filter(
-    (offer) => offer.collectionId === collectionId && offer.tokenId === tokenId,
-  );
+export async function getOffersForToken(
+  collectionId: CollectionId,
+  tokenId: number,
+) {
+  if (collectionId !== "random-walk") {
+    return [];
+  }
+
+  return (await fetchRandomWalkTokenDetail(tokenId)).offers;
+}
+
+export async function getTokenMarket(
+  collectionId: CollectionId,
+  tokenId: number,
+) {
+  if (collectionId !== "random-walk") {
+    return undefined;
+  }
+
+  return fetchRandomWalkTokenDetail(tokenId);
 }

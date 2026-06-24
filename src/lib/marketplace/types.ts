@@ -19,17 +19,44 @@ export type Collection = {
 
 export type MarketOffer = {
   id: string;
+  offerId?: number;
   collectionId: CollectionId;
   tokenId: number;
   kind: OfferKind;
   priceEth: number;
   maker: `0x${string}`;
+  taker?: `0x${string}`;
   createdAt: string;
+  active?: boolean;
+  artwork?: TokenArtwork;
 };
 
 export type TokenArtwork = {
   image: string;
   alt: string;
+};
+
+export type TokenMediaAssets = {
+  blackImage?: string;
+  blackThumb?: string;
+  blackSingleVideo?: string;
+  blackTripleVideo?: string;
+  whiteImage?: string;
+  whiteThumb?: string;
+  whiteSingleVideo?: string;
+  whiteTripleVideo?: string;
+};
+
+export type TokenHistoryRecord = {
+  recordType: number;
+  blockNumber: number;
+  timestamp: number;
+  dateTime: string;
+  owner?: `0x${string}`;
+  seller?: `0x${string}`;
+  buyer?: `0x${string}`;
+  price?: number;
+  offerId?: number;
 };
 
 export type MarketToken = {
@@ -40,6 +67,10 @@ export type MarketToken = {
   seed: string;
   traits: Array<{ label: string; value: string }>;
   artwork: TokenArtwork;
+  assets?: TokenMediaAssets;
+  rating?: number;
+  mintedAt?: string;
+  tokenHistory?: TokenHistoryRecord[];
 };
 
 export type MarketplaceSearchParams = {

@@ -6,10 +6,15 @@ const statLabel = (value: number | undefined) =>
 
 export function MarketplaceStatsGrid({ stats }: { stats: MarketplaceStats }) {
   const items = [
-    { label: "Platform fee", value: "0%" },
-    { label: "Founder privilege", value: "0" },
-    { label: "Visible orders", value: stats.totalOffers.toString() },
-    { label: "Lowest ask", value: statLabel(stats.lowestPrice) },
+    {
+      label: "Platform fee",
+      value: "0%",
+      detail:
+        "No cuts — the full amount goes directly between buyer and seller.",
+    },
+    { label: "Total listings", value: stats.totalOffers.toString() },
+    { label: "Lowest price", value: statLabel(stats.lowestPrice) },
+    { label: "Highest price", value: statLabel(stats.highestPrice) },
   ];
 
   return (
@@ -23,6 +28,9 @@ export function MarketplaceStatsGrid({ stats }: { stats: MarketplaceStats }) {
             {item.label}
           </p>
           <p className="mt-3 text-2xl font-semibold text-ivory">{item.value}</p>
+          {"detail" in item ? (
+            <p className="mt-2 text-xs leading-5 text-bone/75">{item.detail}</p>
+          ) : null}
         </div>
       ))}
     </section>

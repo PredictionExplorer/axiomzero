@@ -13,6 +13,15 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: "https",
+        hostname: "api.randomwalknft.com",
+        port: "1443",
+      },
+      {
+        protocol: "https",
+        hostname: "nfts.randomwalknft.com",
+      },
+      {
+        protocol: "https",
         hostname: "cosmicsignature.com",
       },
       {

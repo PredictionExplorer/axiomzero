@@ -17,10 +17,12 @@ export function TokenActions({
   collection,
   tokenId,
   activeSellOffer,
+  offers,
 }: {
   collection: Collection;
   tokenId: number;
   activeSellOffer?: MarketOffer;
+  offers: MarketOffer[];
 }) {
   return (
     <AppProviders>
@@ -28,6 +30,7 @@ export function TokenActions({
         collection={collection}
         tokenId={tokenId}
         activeSellOffer={activeSellOffer}
+        offers={offers}
       />
     </AppProviders>
   );
@@ -37,10 +40,12 @@ function TokenActionsInner({
   collection,
   tokenId,
   activeSellOffer,
+  offers,
 }: {
   collection: Collection;
   tokenId: number;
   activeSellOffer?: MarketOffer;
+  offers: MarketOffer[];
 }) {
   const { address, isConnected } = useAccount();
   const publicClient = usePublicClient();
@@ -58,7 +63,9 @@ function TokenActionsInner({
     } catch (error) {
       toast.error("Transaction failed", {
         description:
-          error instanceof Error ? error.message : "Review your wallet and try again.",
+          error instanceof Error
+            ? error.message
+            : "Review your wallet and try again.",
       });
     } finally {
       setIsPending(false);
@@ -139,6 +146,72 @@ function TokenActionsInner({
     });
   }
 
+  async function acceptSellOffer() {
+    if (!publicClient || !address) {
+      throw new Error("Connect your wallet to continue.");
+    }
+
+    if (!activeSellOffer?.offerId) {
+      throw new Error("This listing is missing a live on-chain offer ID.");
+    }
+
+    const value = parseEther(String(activeSellOffer.priceEth));
+    const prepared = await prepareContractWrite({
+      publicClient,
+      account: address,
+      address: collection.marketplaceAddress,
+      abi: marketplaceAbi,
+      functionName: "acceptSellOffer",
+      args: [BigInt(activeSellOffer.offerId)],
+      value,
+    });
+
+    return writeContractAsync({
+      address: collection.marketplaceAddress,
+      abi: marketplaceAbi,
+      functionName: "acceptSellOffer",
+      args: [BigInt(activeSellOffer.offerId)],
+      value,
+      ...prepared,
+    });
+  }
+
+  async function cancelOffer(offer: MarketOffer) {
+    if (!publicClient || !address) {
+      throw new Error("Connect your wallet to continue.");
+    }
+
+    if (!offer.offerId) {
+      throw new Error("This order is missing a live on-chain offer ID.");
+    }
+
+    const functionName =
+      offer.kind === "sell" ? "cancelSellOffer" : "cancelBuyOffer";
+    const prepared = await prepareContractWrite({
+      publicClient,
+      account: address,
+      address: collection.marketplaceAddress,
+      abi: marketplaceAbi,
+      functionName,
+      args: [BigInt(offer.offerId)],
+    });
+
+    return writeContractAsync({
+      address: collection.marketplaceAddress,
+      abi: marketplaceAbi,
+      functionName,
+      args: [BigInt(offer.offerId)],
+      ...prepared,
+    });
+  }
+
+  const ownOffers = address
+    ? offers.filter(
+        (offer) =>
+          offer.maker.toLowerCase() === address.toLowerCase() && offer.offerId,
+      )
+    : [];
+
   return (
     <section className="rounded-[2rem] border border-ivory/10 bg-ivory/[0.045] p-5">
       <div>
@@ -146,10 +219,10 @@ function TokenActionsInner({
           Market actions
         </p>
         <h2 className="mt-2 text-2xl font-semibold text-ivory">
-          Trade without privileged lanes
+          Market actions
         </h2>
         <p className="mt-3 text-sm leading-6 text-bone/78">
-          Listings and offers use the collection marketplace contract on
+          Bid, list, or buy through the Random Walk marketplace contract on
           Arbitrum. Review every wallet prompt before signing.
         </p>
       </div>
@@ -160,6 +233,19 @@ function TokenActionsInner({
           <p className="mt-1 text-2xl font-semibold text-chartreuse">
             {formatEth(activeSellOffer.priceEth)}
           </p>
+          <Button
+            className="mt-4 w-full"
+            disabled={!isConnected || isPending || !activeSellOffer.offerId}
+            onClick={() => void runTransaction(acceptSellOffer)}
+          >
+            Buy now for {formatEth(activeSellOffer.priceEth)}
+          </Button>
+          {!activeSellOffer.offerId ? (
+            <p className="mt-2 text-xs text-bone/70">
+              Buying is disabled because this listing did not include an offer
+              ID.
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -188,9 +274,33 @@ function TokenActionsInner({
           disabled={!isConnected || isPending}
           onClick={() => void runTransaction(createBuyOffer)}
         >
-          Make offer
+          Bid
         </Button>
       </div>
+
+      {ownOffers.length ? (
+        <div className="mt-5 space-y-3 rounded-2xl border border-ivory/10 bg-ink/45 p-4">
+          <p className="text-sm font-semibold text-ivory">Your active orders</p>
+          {ownOffers.map((offer) => (
+            <div
+              key={offer.id}
+              className="flex items-center justify-between gap-3 text-sm"
+            >
+              <span className="text-bone/78">
+                {offer.kind === "sell" ? "Listing" : "Bid"} ·{" "}
+                {formatEth(offer.priceEth)}
+              </span>
+              <Button
+                variant="secondary"
+                disabled={isPending}
+                onClick={() => void runTransaction(() => cancelOffer(offer))}
+              >
+                Cancel
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {!isConnected ? (
         <div className="mt-4 space-y-3">
