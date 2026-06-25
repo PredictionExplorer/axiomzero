@@ -17,6 +17,17 @@ describe("collections config", () => {
     );
   });
 
+  it("defines bounded token ranges for discovery and wallet scans", () => {
+    expect(requireCollection("random-walk").tokenRange).toEqual({
+      start: 0,
+      end: 4095,
+    });
+    expect(requireCollection("cosmic-signature").tokenRange).toEqual({
+      start: 1,
+      end: 256,
+    });
+  });
+
   it("throws for impossible collection ids", () => {
     expect(() => requireCollection("missing" as never)).toThrow(
       "Unknown collection",

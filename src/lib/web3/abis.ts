@@ -87,6 +87,13 @@ export const marketplaceAbi = [
 export const erc721Abi = [
   {
     type: "function",
+    name: "balanceOf",
+    stateMutability: "view",
+    inputs: [{ name: "owner", type: "address" }],
+    outputs: [{ name: "balance", type: "uint256" }],
+  },
+  {
+    type: "function",
     name: "isApprovedForAll",
     stateMutability: "view",
     inputs: [
@@ -111,5 +118,15 @@ export const erc721Abi = [
     stateMutability: "view",
     inputs: [{ name: "tokenId", type: "uint256" }],
     outputs: [{ name: "owner", type: "address" }],
+  },
+  {
+    type: "function",
+    name: "tokenOfOwnerByIndex",
+    stateMutability: "view",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "index", type: "uint256" },
+    ],
+    outputs: [{ name: "tokenId", type: "uint256" }],
   },
 ] as const;

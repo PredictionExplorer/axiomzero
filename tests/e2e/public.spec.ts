@@ -30,7 +30,7 @@ test("home page introduces Axiom Zero and links to the marketplace", async ({
   ).toBeVisible();
 });
 
-test("marketplace filters are URL-driven", async ({ page }) => {
+test("marketplace views are URL-driven", async ({ page }) => {
   await page.goto("/marketplace");
   await expect(
     page.getByRole("heading", { name: /generative nft marketplace/i }),
@@ -41,26 +41,30 @@ test("marketplace filters are URL-driven", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: /wallet unavailable/i }),
   ).toHaveCount(0);
-  await page.getByRole("button", { name: /buy offers/i }).click();
+  await page.getByRole("link", { name: /top bids/i }).click();
 
-  await expect(page).toHaveURL(/filter=buy/);
   await expect(
-    page
-      .locator("article")
-      .filter({ hasText: /buy offer/i })
-      .first(),
+    page.getByRole("heading", { name: /active bids sorted highest first/i }),
   ).toBeVisible();
-  await expect(
-    page.locator("article").filter({ hasText: /sell listing/i }),
-  ).toHaveCount(0);
+  await expect(page).toHaveURL(/view=top-bids/);
+  await expect(page).toHaveURL(/sort=price-desc/);
 });
 
 test("marketplace preserves collection filters from the URL", async ({ page }) => {
   await page.goto("/marketplace?collection=cosmic-signature");
-  await page.getByRole("button", { name: /buy offers/i }).click();
+  await page.getByRole("link", { name: /top bids/i }).click();
 
   await expect(page).toHaveURL(/collection=cosmic-signature/);
   await expect(page).toHaveURL(/filter=buy/);
+});
+
+test("owned NFT workspace prompts for a connected wallet", async ({ page }) => {
+  await page.goto("/marketplace?view=my-nfts");
+
+  await expect(
+    page.getByRole("heading", { name: /your nfts, listings, and bid alerts/i }),
+  ).toBeVisible();
+  await expect(page.getByText(/connect a wallet to scan/i)).toBeVisible();
 });
 
 test("token detail page shows order book and wallet prompt", async ({

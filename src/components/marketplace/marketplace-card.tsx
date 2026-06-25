@@ -23,7 +23,7 @@ export function MarketplaceCard({ offer }: { offer: MarketOffer }) {
             alt={offer.artwork.alt}
             fill
             sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
-            className="object-cover transition duration-500 group-hover:scale-[1.035]"
+            className="object-contain p-4 transition duration-500 group-hover:scale-[1.025]"
           />
         ) : (
           <div className="grid h-full place-items-center text-bone/75">

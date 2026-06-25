@@ -69,6 +69,7 @@ function TokenActionsInner({
 
   const isCorrectChain = chainId === arbitrum.id;
   const isOwner = sameAddress(address, tokenOwner);
+  const actionTitle = isOwner ? "List this NFT" : "Bid on this NFT";
 
   const refreshTokenState = useCallback(async () => {
     if (!publicClient) {
@@ -373,11 +374,13 @@ function TokenActionsInner({
           Market actions
         </p>
         <h2 className="mt-2 text-2xl font-semibold text-ivory">
-          Market actions
+          {actionTitle}
         </h2>
         <p className="mt-3 text-sm leading-6 text-bone/78">
-          Bid, list, or buy through the {collection.shortName} marketplace
-          contract on Arbitrum. Review every wallet prompt before signing.
+          {isOwner
+            ? `Set a sale price for this ${collection.shortName} NFT through the Arbitrum marketplace contract.`
+            : `Place a bid or buy the active listing through the ${collection.shortName} marketplace contract on Arbitrum.`}{" "}
+          Review every wallet prompt before signing.
         </p>
       </div>
 
@@ -457,7 +460,7 @@ function TokenActionsInner({
           disabled={Boolean(listingBlocker) || isPending}
           onClick={() => void runTransaction(createSellOffer)}
         >
-          {isApprovedForMarketplace ? "List token" : "Approve and list"}
+          {isApprovedForMarketplace ? "List this NFT" : "Approve and list"}
         </Button>
         <Button
           variant="secondary"

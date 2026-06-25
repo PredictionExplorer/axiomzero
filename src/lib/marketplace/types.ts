@@ -4,6 +4,8 @@ export type OfferKind = "sell" | "buy";
 
 export type SortKey = "price-asc" | "price-desc" | "recent";
 
+export type MarketplaceView = "discover" | "listings" | "top-bids" | "my-nfts";
+
 export type Collection = {
   id: CollectionId;
   name: string;
@@ -15,6 +17,10 @@ export type Collection = {
   externalUrl: string;
   accent: string;
   supplyLabel: string;
+  tokenRange: {
+    start: number;
+    end: number;
+  };
 };
 
 export type MarketOffer = {
@@ -76,10 +82,13 @@ export type MarketToken = {
 export type MarketplaceSearchParams = {
   collection?: CollectionId | "all";
   kind?: OfferKind | "all";
+  view?: MarketplaceView;
   query?: string;
   min?: number;
   max?: number;
   sort?: SortKey;
+  page?: number;
+  pageSize?: number;
 };
 
 export type MarketplaceStats = {
@@ -88,4 +97,19 @@ export type MarketplaceStats = {
   highestPrice?: number;
   sellListings: number;
   buyOffers: number;
+};
+
+export type TokenMarketSummary = {
+  token: MarketToken;
+  activeSellOffer?: MarketOffer;
+  highestBid?: MarketOffer;
+  offers: MarketOffer[];
+};
+
+export type MarketplaceTokenPage = {
+  items: TokenMarketSummary[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
 };

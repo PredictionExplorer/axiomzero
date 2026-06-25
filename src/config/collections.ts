@@ -20,6 +20,13 @@ const COSMIC_SIGNATURE_MARKETPLACE_ADDRESS =
     | `0x${string}`
     | undefined) ?? "0x47eF85Dfb775aCE0934fBa9EEd09D22e6eC0Cc08";
 
+const RANDOM_WALK_MAX_TOKEN_ID = Number(
+  process.env.NEXT_PUBLIC_RANDOM_WALK_MAX_TOKEN_ID ?? 4095,
+);
+const COSMIC_SIGNATURE_MAX_TOKEN_ID = Number(
+  process.env.NEXT_PUBLIC_COSMIC_SIGNATURE_MAX_TOKEN_ID ?? 256,
+);
+
 export const collections = [
   {
     id: "random-walk",
@@ -33,6 +40,12 @@ export const collections = [
     externalUrl: "https://randomwalknft.com/",
     accent: "copper",
     supplyLabel: "4,096 walks",
+    tokenRange: {
+      start: 0,
+      end: Number.isFinite(RANDOM_WALK_MAX_TOKEN_ID)
+        ? RANDOM_WALK_MAX_TOKEN_ID
+        : 4095,
+    },
   },
   {
     id: "cosmic-signature",
@@ -46,6 +59,12 @@ export const collections = [
     externalUrl: "https://cosmicsignature.com/",
     accent: "chartreuse",
     supplyLabel: "Cycle signatures",
+    tokenRange: {
+      start: 1,
+      end: Number.isFinite(COSMIC_SIGNATURE_MAX_TOKEN_ID)
+        ? COSMIC_SIGNATURE_MAX_TOKEN_ID
+        : 256,
+    },
   },
 ] satisfies Collection[];
 

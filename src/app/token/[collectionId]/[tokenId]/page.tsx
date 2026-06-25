@@ -167,12 +167,12 @@ export default async function TokenPage({
                 fill
                 priority
                 sizes="(min-width: 1024px) 45vw, 100vw"
-                className="object-cover"
+                className="object-contain p-4"
               />
             ) : (
               <video
                 src={selectedMedia.src}
-                className="h-full w-full object-cover"
+                className="h-full w-full object-contain p-4"
                 autoPlay
                 muted
                 loop
@@ -356,6 +356,7 @@ export default async function TokenPage({
                 <tbody>
                   {tokenOffers
                     .filter((offer) => offer.kind === "buy")
+                    .sort((left, right) => right.priceEth - left.priceEth)
                     .map((offer) => (
                       <tr key={offer.id} className="border-b border-ivory/10">
                         <td className="px-4 py-4">

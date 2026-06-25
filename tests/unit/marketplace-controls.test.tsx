@@ -4,12 +4,13 @@ import { describe, expect, it } from "vitest";
 import { MarketplaceControls } from "@/components/marketplace/marketplace-controls";
 
 describe("MarketplaceControls", () => {
-  it("preserves a selected collection across form submits", () => {
+  it("shows view navigation and preserves selected query state", () => {
     const { container } = render(
       <MarketplaceControls
         search={{
           collection: "cosmic-signature",
           kind: "sell",
+          view: "listings",
           sort: "price-asc",
         }}
         totalOffers={2}
@@ -17,24 +18,28 @@ describe("MarketplaceControls", () => {
     );
 
     expect(
-      container.querySelector('input[type="hidden"][name="collection"]'),
-    ).toHaveValue("cosmic-signature");
+      screen.getByRole("link", { name: /^listings/i }),
+    ).toHaveAttribute(
+      "href",
+      expect.stringContaining("collection=cosmic-signature"),
+    );
+    expect(container.querySelector('input[name="view"]')).toHaveValue("listings");
+    expect(screen.getByLabelText(/filter by collection/i)).toHaveValue(
+      "cosmic-signature",
+    );
     expect(screen.getByText("2 entries")).toBeInTheDocument();
   });
 
-  it("omits the collection field when all collections are selected", () => {
-    const { container } = render(
+  it("links top bids to the highest-bid offer view", () => {
+    render(
       <MarketplaceControls
-        search={{ collection: "all", kind: "buy" }}
+        search={{ collection: "all", kind: "buy", view: "top-bids" }}
         totalOffers={0}
       />,
     );
 
     expect(
-      container.querySelector('input[type="hidden"][name="collection"]'),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /buy offers/i }),
-    ).toBeInTheDocument();
+      screen.getByRole("link", { name: /^top bids/i }),
+    ).toHaveAttribute("href", expect.stringContaining("sort=price-desc"));
   });
 });

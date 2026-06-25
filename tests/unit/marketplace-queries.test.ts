@@ -11,10 +11,12 @@ import {
   filterOffers,
   getMarketplaceOffers,
   getMarketplaceStats,
+  getMarketplaceTokenPage,
   getOffersForToken,
   getToken,
   getTokenMarket,
   parseMarketplaceSearchParams,
+  summarizeTokenMarket,
   sortOffers,
 } from "@/lib/marketplace/queries";
 import type { MarketOffer } from "@/lib/marketplace/types";
@@ -58,14 +60,19 @@ describe("marketplace queries", () => {
         min: "0.5",
         max: "5",
         sort: "recent",
+        page: "3",
+        pageSize: "18",
       }),
     ).toEqual({
       collection: "all",
       kind: "buy",
+      view: "discover",
       min: 0.5,
       max: 5,
       sort: "recent",
       query: undefined,
+      page: 3,
+      pageSize: 18,
     });
 
     expect(
@@ -78,8 +85,30 @@ describe("marketplace queries", () => {
     ).toMatchObject({
       collection: "all",
       kind: "sell",
+      view: "discover",
       sort: "price-asc",
       min: undefined,
+      page: 1,
+      pageSize: 12,
+    });
+  });
+
+  it("uses view-specific marketplace defaults", () => {
+    expect(parseMarketplaceSearchParams({ view: "top-bids" })).toMatchObject({
+      view: "top-bids",
+      kind: "buy",
+      sort: "price-desc",
+    });
+    expect(parseMarketplaceSearchParams({ view: "listings" })).toMatchObject({
+      view: "listings",
+      kind: "sell",
+      sort: "price-asc",
+    });
+    expect(
+      parseMarketplaceSearchParams({ pageSize: "999", page: "-4" }),
+    ).toMatchObject({
+      page: 1,
+      pageSize: 24,
     });
   });
 
@@ -149,6 +178,35 @@ describe("marketplace queries", () => {
     });
   });
 
+  it("summarizes token markets with the cheapest listing and highest bid", () => {
+    const summary = summarizeTokenMarket({
+      token: {
+        collectionId: "random-walk",
+        tokenId: 1,
+        name: "Random Walk #000001",
+        owner: "0x0000000000000000000000000000000000000001",
+        seed: "seed",
+        traits: [],
+        artwork: { image: "token.png", alt: "Token artwork" },
+      },
+      offers: [
+        baseOffers[0],
+        {
+          id: "bid",
+          collectionId: "random-walk",
+          tokenId: 1,
+          kind: "buy",
+          priceEth: 5,
+          maker: "0x0000000000000000000000000000000000000004",
+          createdAt: "2026-01-04T00:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(summary.activeSellOffer?.id).toBe("one");
+    expect(summary.highestBid?.id).toBe("bid");
+  });
+
   it("filters duplicate token IDs independently by offer type", () => {
     const duplicateTokenOffers = [
       ...baseOffers,
@@ -189,6 +247,30 @@ describe("marketplace queries", () => {
 
     expect(offers.map((offer) => offer.id)).toEqual(["sell-1-1-1.0000"]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("loads a small token discovery page from token search", async () => {
+    const detailHtml = String.raw`
+      self.__next_f.push([1,"{\"nft\":{\"id\":9,\"owner\":\"0x0000000000000000000000000000000000000001\",\"seed\":\"seed\"},\"buyOffers\":[{\"id\":2,\"offerId\":2,\"tokenId\":9,\"seller\":\"0x0000000000000000000000000000000000000000\",\"buyer\":\"0x0000000000000000000000000000000000000002\",\"price\":0.2,\"active\":true,\"createdAt\":\"2026-01-02T00:00:00.000Z\",\"createdAtTimestamp\":1,\"kind\":\"buy\"}],\"sellOffers\":[]}"]);
+    `;
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(detailHtml)));
+
+    const page = await getMarketplaceTokenPage({
+      collection: "random-walk",
+      query: "9",
+      view: "discover",
+      page: 1,
+      pageSize: 12,
+    });
+
+    expect(page).toMatchObject({
+      page: 1,
+      pageSize: 12,
+      totalItems: 1,
+      totalPages: 1,
+    });
+    expect(page.items[0]?.token.tokenId).toBe(9);
+    expect(page.items[0]?.highestBid?.priceEth).toBe(0.2);
   });
 
   it("fetches marketplace offers from the requested Cosmic Signature source", async () => {

@@ -5,6 +5,7 @@ import { BRAND_NAME } from "@/lib/brand";
 
 const navItems = [
   { href: "/marketplace", label: "Marketplace" },
+  { href: "/marketplace?view=my-nfts", label: "My NFTs" },
   { href: "/marketplace?collection=random-walk", label: "Random Walk" },
   { href: "/marketplace?collection=cosmic-signature", label: "Cosmic Signature" },
 ];
