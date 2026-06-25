@@ -1,4 +1,4 @@
-import { collections } from "@/config/collections";
+import { collections, requireCollection } from "@/config/collections";
 import type {
   CollectionId,
   MarketOffer,
@@ -12,6 +12,11 @@ import {
   fetchRandomWalkMetadata,
   fetchRandomWalkTokenDetail,
 } from "@/lib/marketplace/random-walk-live";
+import { fetchCosmicSignatureMetadata } from "@/lib/marketplace/cosmic-signature-live";
+import {
+  fetchCollectionContractOffers,
+  fetchContractOffersForTokenId,
+} from "@/lib/marketplace/marketplace-contract-live";
 
 const collectionIds = new Set(collections.map((collection) => collection.id));
 const offerKinds = new Set(["buy", "sell"]);
@@ -112,16 +117,47 @@ export function sortOffers(
   });
 }
 
-export async function getMarketplaceOffers(search: MarketplaceSearchParams) {
+async function getMarketplaceOffersForCollection(
+  collectionId: CollectionId,
+  search: MarketplaceSearchParams,
+) {
   const requestedKind =
     search.kind && search.kind !== "all" ? search.kind : "sell";
-  const offers =
-    search.kind === "all"
+
+  if (collectionId === "random-walk") {
+    return search.kind === "all"
       ? [
           ...(await fetchRandomWalkMarketplaceOffers("sell", search.sort)),
           ...(await fetchRandomWalkMarketplaceOffers("buy", search.sort)),
         ]
       : await fetchRandomWalkMarketplaceOffers(requestedKind, search.sort);
+  }
+
+  const collection = requireCollection(collectionId);
+  const offers = await fetchCollectionContractOffers({
+    collectionId,
+    nftAddress: collection.nftAddress,
+    marketplaceAddress: collection.marketplaceAddress,
+    loadToken: fetchCosmicSignatureMetadata,
+  });
+
+  return search.kind === "all"
+    ? offers
+    : offers.filter((offer) => offer.kind === requestedKind);
+}
+
+export async function getMarketplaceOffers(search: MarketplaceSearchParams) {
+  const requestedCollections =
+    search.collection && search.collection !== "all"
+      ? [search.collection]
+      : collections.map((collection) => collection.id);
+  const offers = (
+    await Promise.all(
+      requestedCollections.map((collectionId) =>
+        getMarketplaceOffersForCollection(collectionId, search),
+      ),
+    )
+  ).flat();
 
   return sortOffers(filterOffers(offers, search), search.sort);
 }
@@ -143,35 +179,54 @@ export function getMarketplaceStats(
 }
 
 export async function getToken(collectionId: CollectionId, tokenId: number) {
-  if (collectionId !== "random-walk") {
-    return undefined;
+  if (collectionId === "random-walk") {
+    try {
+      return (await fetchRandomWalkTokenDetail(tokenId)).token;
+    } catch {
+      return fetchRandomWalkMetadata(tokenId);
+    }
   }
 
-  try {
-    return (await fetchRandomWalkTokenDetail(tokenId)).token;
-  } catch {
-    return fetchRandomWalkMetadata(tokenId);
-  }
+  return fetchCosmicSignatureMetadata(tokenId);
 }
 
 export async function getOffersForToken(
   collectionId: CollectionId,
   tokenId: number,
 ) {
-  if (collectionId !== "random-walk") {
-    return [];
+  if (collectionId === "random-walk") {
+    return (await fetchRandomWalkTokenDetail(tokenId)).offers;
   }
 
-  return (await fetchRandomWalkTokenDetail(tokenId)).offers;
+  const collection = requireCollection(collectionId);
+  const token = await fetchCosmicSignatureMetadata(tokenId);
+
+  return fetchContractOffersForTokenId({
+    collectionId,
+    nftAddress: collection.nftAddress,
+    marketplaceAddress: collection.marketplaceAddress,
+    tokenId,
+    artwork: token.artwork,
+  });
 }
 
 export async function getTokenMarket(
   collectionId: CollectionId,
   tokenId: number,
 ) {
-  if (collectionId !== "random-walk") {
-    return undefined;
+  if (collectionId === "random-walk") {
+    return fetchRandomWalkTokenDetail(tokenId);
   }
 
-  return fetchRandomWalkTokenDetail(tokenId);
+  const collection = requireCollection(collectionId);
+  const token = await fetchCosmicSignatureMetadata(tokenId);
+  const offers = await fetchContractOffersForTokenId({
+    collectionId,
+    nftAddress: collection.nftAddress,
+    marketplaceAddress: collection.marketplaceAddress,
+    tokenId,
+    artwork: token.artwork,
+  });
+
+  return { token, offers };
 }

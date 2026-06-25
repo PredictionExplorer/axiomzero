@@ -28,6 +28,10 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "app.cosmicsignature.com",
       },
+      {
+        protocol: "https",
+        hostname: "nfts.cosmicsignature.com",
+      },
     ],
   },
 };

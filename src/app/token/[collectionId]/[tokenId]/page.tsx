@@ -78,6 +78,24 @@ function formatFullDate(value: string | undefined) {
   }).format(new Date(value));
 }
 
+function collectorSnapshotTrait(token: MarketToken) {
+  if (token.rating !== undefined) {
+    return {
+      label: "Beauty score",
+      value: token.rating.toFixed(2),
+    };
+  }
+
+  const primaryTrait = token.traits.find(
+    (trait) => trait.label.toLowerCase() !== "seed",
+  );
+
+  return {
+    label: primaryTrait?.label ?? "Primary trait",
+    value: primaryTrait?.value ?? "Not available",
+  };
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -135,6 +153,7 @@ export default async function TokenPage({
   const media =
     mediaParam === "single" || mediaParam === "triple" ? mediaParam : "image";
   const selectedMedia = resolveMedia(token, theme, media);
+  const snapshotTrait = collectorSnapshotTrait(token);
 
   return (
     <div className="mx-auto grid max-w-7xl gap-8 px-5 py-14 sm:px-8 lg:grid-cols-[0.95fr_1.05fr]">
@@ -266,9 +285,9 @@ export default async function TokenPage({
                 </dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="text-bone/75">Beauty score</dt>
+                <dt className="text-bone/75">{snapshotTrait.label}</dt>
                 <dd className="text-right font-medium text-ivory">
-                  {(token.rating ?? 0).toFixed(2)}
+                  {snapshotTrait.value}
                 </dd>
               </div>
               <div className="flex justify-between gap-4">
@@ -393,9 +412,10 @@ export default async function TokenPage({
               Collector notes
             </h2>
             <p className="mt-3 text-sm leading-6 text-bone/78">
-              Random Walk metadata is sourced from the public Random Walk detail
-              and metadata endpoints. Wallet actions still require a connected
-              wallet and on-chain confirmation on Arbitrum.
+              {collection.shortName} metadata and market data are sourced from
+              public endpoints and verified Arbitrum contracts. Wallet actions
+              still require a connected wallet and on-chain confirmation on
+              Arbitrum.
             </p>
           </div>
         </section>

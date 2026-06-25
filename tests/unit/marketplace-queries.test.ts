@@ -1,4 +1,11 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const contractMocks = vi.hoisted(() => ({
+  fetchCollectionContractOffers: vi.fn(),
+  fetchContractOffersForTokenId: vi.fn(),
+}));
+
+vi.mock("@/lib/marketplace/marketplace-contract-live", () => contractMocks);
 
 import {
   filterOffers,
@@ -34,8 +41,14 @@ const baseOffers = [
 ] satisfies MarketOffer[];
 
 describe("marketplace queries", () => {
+  beforeEach(() => {
+    contractMocks.fetchCollectionContractOffers.mockResolvedValue([]);
+    contractMocks.fetchContractOffersForTokenId.mockResolvedValue([]);
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.clearAllMocks();
   });
 
   it("parses supported query state and normalizes invalid values", () => {
@@ -168,6 +181,7 @@ describe("marketplace queries", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const offers = await getMarketplaceOffers({
+      collection: "random-walk",
       kind: "all",
       min: 0.75,
       sort: "price-asc",
@@ -177,10 +191,59 @@ describe("marketplace queries", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("fetches marketplace offers from the requested Cosmic Signature source", async () => {
+    contractMocks.fetchCollectionContractOffers.mockResolvedValueOnce([
+      baseOffers[1],
+    ]);
+
+    const offers = await getMarketplaceOffers({
+      collection: "cosmic-signature",
+      kind: "buy",
+      sort: "price-asc",
+    });
+
+    expect(offers.map((offer) => offer.id)).toEqual(["two"]);
+    expect(contractMocks.fetchCollectionContractOffers).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collectionId: "cosmic-signature",
+        nftAddress: "0xbb84Be3500A63581d3F2d5AC3bdF8685AAedad25",
+        marketplaceAddress: "0x47eF85Dfb775aCE0934fBa9EEd09D22e6eC0Cc08",
+      }),
+    );
+  });
+
+  it("merges both collection sources when all collections are selected", async () => {
+    const sellHtml = String.raw`["$","div","sell-1",{"children":[["$","$L1f",null,{"id":1,"image":"sell.jpg","href":"/detail/1"}],["$","span",null,{"children":["#000001"," · ","1.0000 ETH"]}]]}]`;
+    const fetchMock = vi.fn(async () => new Response(sellHtml));
+    vi.stubGlobal("fetch", fetchMock);
+    contractMocks.fetchCollectionContractOffers.mockResolvedValueOnce([
+      baseOffers[1],
+    ]);
+
+    const offers = await getMarketplaceOffers({
+      collection: "all",
+      kind: "sell",
+      sort: "price-asc",
+    });
+
+    expect(offers.map((offer) => offer.collectionId)).toEqual(["random-walk"]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(contractMocks.fetchCollectionContractOffers).toHaveBeenCalledTimes(1);
+  });
+
   it("reads token markets, offers, and metadata fallback through query helpers", async () => {
     const detailHtml = String.raw`
       self.__next_f.push([1,"{\"nft\":{\"id\":9,\"owner\":\"0x0000000000000000000000000000000000000001\",\"seed\":\"seed\"},\"buyOffers\":[{\"id\":2,\"offerId\":2,\"tokenId\":9,\"seller\":\"0x0000000000000000000000000000000000000000\",\"buyer\":\"0x0000000000000000000000000000000000000002\",\"price\":0.2,\"active\":true,\"createdAt\":\"2026-01-02T00:00:00.000Z\",\"createdAtTimestamp\":1,\"kind\":\"buy\"}],\"sellOffers\":[]}"]);
     `;
+    const cosmicMetadata = {
+      image: "cosmic.png",
+      name: "Cosmic Signature #10",
+      properties: {
+        owner: "0x0000000000000000000000000000000000000003",
+        seed: "seed",
+        token_id: 10,
+      },
+    };
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(new Response(detailHtml))
@@ -188,7 +251,13 @@ describe("marketplace queries", () => {
       .mockResolvedValueOnce(new Response("", { status: 404 }))
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ properties: { seed: "fallback" } })),
-      );
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify(cosmicMetadata)))
+      .mockResolvedValueOnce(new Response(JSON.stringify(cosmicMetadata)))
+      .mockResolvedValueOnce(new Response(JSON.stringify(cosmicMetadata)));
+    contractMocks.fetchContractOffersForTokenId.mockResolvedValue([
+      baseOffers[1],
+    ]);
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(getTokenMarket("random-walk", 9)).resolves.toMatchObject({
@@ -198,12 +267,23 @@ describe("marketplace queries", () => {
     await expect(getToken("random-walk", 10)).resolves.toMatchObject({
       seed: "fallback",
     });
-    await expect(getToken("cosmic-signature", 10)).resolves.toBeUndefined();
-    await expect(getOffersForToken("cosmic-signature", 10)).resolves.toEqual(
-      [],
+    await expect(getToken("cosmic-signature", 10)).resolves.toMatchObject({
+      collectionId: "cosmic-signature",
+      tokenId: 10,
+      seed: "seed",
+    });
+    await expect(getOffersForToken("cosmic-signature", 10)).resolves.toEqual([
+      baseOffers[1],
+    ]);
+    await expect(getTokenMarket("cosmic-signature", 10)).resolves.toMatchObject({
+      token: { collectionId: "cosmic-signature", tokenId: 10 },
+      offers: [baseOffers[1]],
+    });
+    expect(contractMocks.fetchContractOffersForTokenId).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collectionId: "cosmic-signature",
+        tokenId: 10,
+      }),
     );
-    await expect(
-      getTokenMarket("cosmic-signature", 10),
-    ).resolves.toBeUndefined();
   });
 });

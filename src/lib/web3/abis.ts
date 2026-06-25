@@ -41,6 +41,47 @@ export const marketplaceAbi = [
     inputs: [{ name: "offerId", type: "uint256" }],
     outputs: [],
   },
+  {
+    type: "function",
+    name: "getSellOffers",
+    stateMutability: "view",
+    inputs: [
+      { name: "_nftAddress", type: "address" },
+      { name: "tokenId", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "uint256[]" }],
+  },
+  {
+    type: "function",
+    name: "getBuyOffers",
+    stateMutability: "view",
+    inputs: [
+      { name: "_nftAddress", type: "address" },
+      { name: "tokenId", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "uint256[]" }],
+  },
+  {
+    type: "function",
+    name: "numOffers",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "offers",
+    stateMutability: "view",
+    inputs: [{ name: "", type: "uint256" }],
+    outputs: [
+      { name: "nftAddress", type: "address" },
+      { name: "tokenId", type: "uint256" },
+      { name: "price", type: "uint256" },
+      { name: "seller", type: "address" },
+      { name: "buyer", type: "address" },
+      { name: "active", type: "bool" },
+    ],
+  },
 ] as const;
 
 export const erc721Abi = [

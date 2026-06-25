@@ -222,8 +222,8 @@ function TokenActionsInner({
           Market actions
         </h2>
         <p className="mt-3 text-sm leading-6 text-bone/78">
-          Bid, list, or buy through the Random Walk marketplace contract on
-          Arbitrum. Review every wallet prompt before signing.
+          Bid, list, or buy through the {collection.shortName} marketplace
+          contract on Arbitrum. Review every wallet prompt before signing.
         </p>
       </div>
 

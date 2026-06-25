@@ -14,6 +14,10 @@ export function MarketplaceControls({
       action="/marketplace"
       className="space-y-5 rounded-[2rem] border border-ivory/10 bg-ivory/[0.045] p-5 shadow-[0_24px_90px_rgba(0,0,0,0.22)]"
     >
+      {search.collection && search.collection !== "all" ? (
+        <input type="hidden" name="collection" value={search.collection} />
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-base font-semibold text-ivory">

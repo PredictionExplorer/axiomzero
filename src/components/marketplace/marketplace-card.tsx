@@ -63,7 +63,7 @@ export function MarketplaceCard({ offer }: { offer: MarketOffer }) {
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs text-bone/75">
             {offer.createdAt === "1970-01-01T00:00:00.000Z"
-              ? "Live Random Walk order"
+              ? `Live ${collection.shortName} order`
               : formatDate(offer.createdAt)}
           </p>
           <ButtonLink

@@ -1,7 +1,12 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-for (const path of ["/", "/marketplace", "/token/random-walk/1271"]) {
+for (const path of [
+  "/",
+  "/marketplace",
+  "/token/random-walk/1271",
+  "/token/cosmic-signature/1",
+]) {
   test(`has no serious accessibility issues on ${path}`, async ({ page }) => {
     await page.goto(path);
 

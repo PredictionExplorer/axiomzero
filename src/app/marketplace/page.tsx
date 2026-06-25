@@ -12,7 +12,7 @@ import {
 export const metadata: Metadata = {
   title: "Marketplace",
   description:
-    "Buy and sell Random Walk NFTs with zero platform fees. Filter by price, token ID, or offer type.",
+    "Buy and sell Random Walk and Cosmic Signature NFTs with zero platform fees. Filter by collection, price, token ID, or offer type.",
 };
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
@@ -35,21 +35,21 @@ export default async function MarketplacePage({
             Zero-fee marketplace
           </p>
           <h1 className="mt-5 max-w-4xl text-5xl font-semibold tracking-[-0.06em] text-ivory sm:text-7xl">
-            Random Walk NFTs Marketplace
+            Generative NFT Marketplace
           </h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-bone/70">
-            Buy and sell Random Walk NFTs with zero platform fees. Filter by
-            price, token ID, or offer type.
+            Buy and sell Random Walk and Cosmic Signature NFTs with zero
+            platform fees. Filter by collection, price, token ID, or offer type.
           </p>
         </div>
 
         <div className="rounded-[2rem] border border-copper/20 bg-copper/10 p-5">
           <p className="text-xs uppercase tracking-[0.26em] text-copper">
-            Live Random Walk market
+            Live collection markets
           </p>
           <p className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-ivory">
-            Real listings, real offers, and real Random Walk artwork from the
-            public marketplace.
+            Real listings, real offers, and collection artwork from public
+            endpoints and verified Arbitrum contracts.
           </p>
         </div>
       </section>
