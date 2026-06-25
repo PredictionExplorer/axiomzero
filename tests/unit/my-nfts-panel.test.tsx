@@ -46,7 +46,10 @@ const collection = {
   marketplaceAddress: "0x47eF85Dfb775aCE0934fBa9EEd09D22e6eC0Cc08",
   externalUrl: "https://randomwalknft.com/",
   accent: "copper",
-  supplyLabel: "4,096 walks",
+  supplyNoun: {
+    singular: "walk",
+    plural: "walks",
+  },
   tokenRange: { start: 0, end: 2 },
 } satisfies Collection;
 

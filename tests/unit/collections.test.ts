@@ -21,6 +21,17 @@ describe("collections config", () => {
     );
   });
 
+  it("defines collection supply nouns without hard-coded counts", () => {
+    expect(requireCollection("random-walk").supplyNoun).toEqual({
+      singular: "walk",
+      plural: "walks",
+    });
+    expect(requireCollection("cosmic-signature").supplyNoun).toEqual({
+      singular: "signature",
+      plural: "signatures",
+    });
+  });
+
   it("defines fallback token ranges for discovery and wallet scans", () => {
     expect(requireCollection("random-walk").tokenRange).toEqual({
       start: 0,

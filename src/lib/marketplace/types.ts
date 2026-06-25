@@ -16,7 +16,10 @@ export type Collection = {
   marketplaceAddress: `0x${string}`;
   externalUrl: string;
   accent: string;
-  supplyLabel: string;
+  supplyNoun: {
+    singular: string;
+    plural: string;
+  };
   tokenRange: {
     start: number;
     end: number;

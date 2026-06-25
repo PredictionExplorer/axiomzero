@@ -31,6 +31,11 @@ type FetchCollectionTokenIdsOptions = {
   client?: Erc721IndexClient;
 };
 
+type FetchCollectionSupplyOptions = {
+  collectionId: CollectionId;
+  client?: Pick<Erc721IndexClient, "readContract">;
+};
+
 type FetchCollectionTokenUriOptions = {
   collectionId: CollectionId;
   tokenId: number;
@@ -108,8 +113,36 @@ export async function fetchCollectionTokenIds({
   }
 }
 
+export async function fetchCollectionSupply({
+  collectionId,
+  client = createErc721PublicClient(),
+}: FetchCollectionSupplyOptions) {
+  const collection = requireCollection(collectionId);
+
+  try {
+    const totalSupply = (await client.readContract({
+      address: collection.nftAddress,
+      abi: erc721Abi,
+      functionName: "totalSupply",
+    })) as bigint;
+    const count = Number(totalSupply);
+
+    if (!Number.isSafeInteger(count) || count < 0) {
+      throw new Error(`${collection.shortName} totalSupply is invalid.`);
+    }
+
+    return count;
+  } catch {
+    return undefined;
+  }
+}
+
 export const getCollectionTokenIds = cache(async (collectionId: CollectionId) =>
   fetchCollectionTokenIds({ collectionId }),
+);
+
+export const getCollectionSupply = cache(async (collectionId: CollectionId) =>
+  fetchCollectionSupply({ collectionId }),
 );
 
 export async function fetchCollectionTokenUri({

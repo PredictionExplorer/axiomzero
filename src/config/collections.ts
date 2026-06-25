@@ -42,7 +42,10 @@ export const collections = [
     marketplaceAddress: RANDOM_WALK_MARKETPLACE_ADDRESS,
     externalUrl: "https://randomwalknft.com/",
     accent: "copper",
-    supplyLabel: "4,096 walks",
+    supplyNoun: {
+      singular: "walk",
+      plural: "walks",
+    },
     tokenRange: {
       start: 0,
       end: Number.isFinite(RANDOM_WALK_MAX_TOKEN_ID)
@@ -61,7 +64,10 @@ export const collections = [
     marketplaceAddress: COSMIC_SIGNATURE_MARKETPLACE_ADDRESS,
     externalUrl: "https://cosmicsignature.com/",
     accent: "chartreuse",
-    supplyLabel: "Cycle signatures",
+    supplyNoun: {
+      singular: "signature",
+      plural: "signatures",
+    },
     tokenRange: {
       start: Number.isFinite(COSMIC_SIGNATURE_MIN_TOKEN_ID)
         ? COSMIC_SIGNATURE_MIN_TOKEN_ID

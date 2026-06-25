@@ -12,6 +12,8 @@ import {
   getMarketplaceOffers,
   getMarketplaceStats,
 } from "@/lib/marketplace/queries";
+import { getCollectionSupply } from "@/lib/marketplace/collection-index-live";
+import { formatCollectionSupplyLabel } from "@/lib/marketplace/collection-supply";
 import {
   collectionPath,
   MY_NFTS_PATH,
@@ -22,15 +24,19 @@ import { formatEth, formatTokenId } from "@/lib/utils";
 import { ButtonLink } from "@/components/ui/button";
 
 async function getCollectionStats(collection: Collection) {
-  const offers = await getMarketplaceOffers({
-    collection: collection.id,
-    kind: "all",
-    sort: "price-asc",
-    view: "discover",
-  });
+  const [offers, supply] = await Promise.all([
+    getMarketplaceOffers({
+      collection: collection.id,
+      kind: "all",
+      sort: "price-asc",
+      view: "discover",
+    }),
+    getCollectionSupply(collection.id),
+  ]);
 
   return {
     collection,
+    supply,
     stats: getMarketplaceStats(offers),
   };
 }
@@ -154,7 +160,7 @@ export default async function Home() {
           </ButtonLink>
         </article>
 
-        {collectionMarkets.map(({ collection, stats }) => (
+        {collectionMarkets.map(({ collection, stats, supply }) => (
           <article
             key={collection.id}
             className="rounded-[2rem] border border-ivory/10 bg-ivory/[0.045] p-6 transition hover:-translate-y-1 hover:border-copper/35 hover:bg-ivory/[0.07]"
@@ -162,7 +168,7 @@ export default async function Home() {
             <div className="flex items-start justify-between gap-5">
               <div>
                 <p className="text-xs uppercase tracking-[0.28em] text-copper">
-                  {collection.supplyLabel}
+                  {formatCollectionSupplyLabel(collection, supply)}
                 </p>
                 <h2 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-ivory">
                   {collection.shortName}

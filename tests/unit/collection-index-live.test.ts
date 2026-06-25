@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   fallbackCollectionTokenIds,
   fetchCollectionTokenIds,
+  fetchCollectionSupply,
   fetchCollectionTokenUri,
   type Erc721IndexClient,
 } from "@/lib/marketplace/collection-index-live";
@@ -80,6 +81,35 @@ describe("collection index live adapter", () => {
     ).resolves.toEqual(
       fallbackCollectionTokenIds(requireCollection("cosmic-signature")),
     );
+  });
+
+  it("reads live collection supply from the NFT contract", async () => {
+    const client = mockClient({ totalSupply: 24n });
+
+    await expect(
+      fetchCollectionSupply({
+        collectionId: "cosmic-signature",
+        client,
+      }),
+    ).resolves.toBe(24);
+    expect(client.readContract).toHaveBeenCalledWith(
+      expect.objectContaining({ functionName: "totalSupply" }),
+    );
+  });
+
+  it("does not guess supply when the NFT contract read fails", async () => {
+    const client = {
+      readContract: vi.fn(async () => {
+        throw new Error("RPC unavailable");
+      }),
+    };
+
+    await expect(
+      fetchCollectionSupply({
+        collectionId: "random-walk",
+        client,
+      }),
+    ).resolves.toBeUndefined();
   });
 
   it("reads collection token URIs from the NFT contract", async () => {

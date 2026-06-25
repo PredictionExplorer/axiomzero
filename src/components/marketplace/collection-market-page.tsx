@@ -9,6 +9,8 @@ import {
   getMarketplaceTokenPage,
   parseMarketplaceSearchParams,
 } from "@/lib/marketplace/queries";
+import { getCollectionSupply } from "@/lib/marketplace/collection-index-live";
+import { formatCollectionSupplyLabel } from "@/lib/marketplace/collection-supply";
 import { collectionMarketHref } from "@/lib/marketplace/routes";
 import type {
   CollectionId,
@@ -40,7 +42,7 @@ export async function CollectionMarketPage({
         ? { ...search, kind: "sell" as const }
         : { ...search, kind: "all" as const };
   const statsSearch = { ...search, kind: "all" as const };
-  const [visibleOffers, statsOffers, tokenPage] = await Promise.all([
+  const [visibleOffers, statsOffers, tokenPage, supply] = await Promise.all([
     getMarketplaceOffers(offerSearch),
     offerSearch.kind === "all"
       ? Promise.resolve(undefined)
@@ -48,6 +50,7 @@ export async function CollectionMarketPage({
     activeView === "discover"
       ? getMarketplaceTokenPage(search)
       : Promise.resolve(undefined),
+    getCollectionSupply(collectionId),
   ]);
   const stats = getMarketplaceStats(statsOffers ?? visibleOffers);
 
@@ -69,7 +72,7 @@ export async function CollectionMarketPage({
 
         <div className="rounded-[2rem] border border-copper/20 bg-copper/10 p-5">
           <p className="text-xs uppercase tracking-[0.26em] text-copper">
-            {collection.supplyLabel}
+            {formatCollectionSupplyLabel(collection, supply)}
           </p>
           <p className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-ivory">
             {collection.artSystem}
