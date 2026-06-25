@@ -34,14 +34,11 @@ describe("web3 config", () => {
     getDefaultConfigMock.mockClear();
   });
 
-  it("does not throw during Vercel production builds when WalletConnect is missing", async () => {
+  it("uses an internal placeholder only to keep Vercel production builds SSR-safe", async () => {
     const config = await importConfigWithEnv({ VERCEL_ENV: "production" });
 
     expect(config.isWalletConnectConfigured).toBe(false);
     expect(config.walletConnectProjectId).toBeUndefined();
-    expect(config.walletConfigurationWarning).toMatch(
-      /NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID/,
-    );
     expect(getDefaultConfigMock).toHaveBeenCalledWith(
       expect.objectContaining({
         appName: "Axiom Zero",

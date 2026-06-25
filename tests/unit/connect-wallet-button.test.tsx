@@ -26,8 +26,6 @@ const rainbowKitMock = vi.hoisted(() => ({
 }));
 const walletConfigMock = vi.hoisted(() => ({
   isWalletConnectConfigured: true,
-  walletConfigurationWarning:
-    "Wallet connections require NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID.",
 }));
 
 vi.mock("@rainbow-me/rainbowkit", () => ({
@@ -53,18 +51,15 @@ describe("ConnectWalletButton", () => {
     walletConfigMock.isWalletConnectConfigured = true;
   });
 
-  it("renders a disabled fallback when WalletConnect is not configured", () => {
+  it("still opens the connect modal when WalletConnect env is not configured", () => {
     walletConfigMock.isWalletConnectConfigured = false;
 
     render(<ConnectWalletButton />);
 
-    expect(
-      screen.getByRole("button", { name: /wallet unavailable/i }),
-    ).toBeDisabled();
-    expect(
-      screen.getByText(/wallet connections require/i),
-    ).toBeInTheDocument();
-    expect(rainbowKitMock.openConnectModal).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /connect wallet/i }));
+
+    expect(screen.queryByRole("button", { name: /wallet unavailable/i })).toBeNull();
+    expect(rainbowKitMock.openConnectModal).toHaveBeenCalledTimes(1);
   });
 
   it("opens the connect modal when disconnected", () => {

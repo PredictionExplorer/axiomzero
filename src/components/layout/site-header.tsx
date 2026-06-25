@@ -2,7 +2,6 @@ import Link from "next/link";
 
 import { ConnectWalletButton } from "@/components/wallet/connect-wallet-button";
 import { BRAND_NAME } from "@/lib/brand";
-import { ButtonLink } from "@/components/ui/button";
 
 const navItems = [
   { href: "/marketplace", label: "Marketplace" },
@@ -40,16 +39,7 @@ export function SiteHeader() {
           ))}
         </nav>
 
-        <div className="flex items-center gap-3">
-          <ButtonLink
-            href="/marketplace"
-            variant="secondary"
-            className="hidden xl:flex"
-          >
-            Browse market
-          </ButtonLink>
-          <ConnectWalletButton />
-        </div>
+        <ConnectWalletButton />
       </div>
     </header>
   );

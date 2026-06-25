@@ -25,11 +25,11 @@ Copy `env.example` to `.env.local` and fill in production values before wallet
 testing or deployment.
 
 Wallet connections require a real `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`.
-Deployments still build without it so the marketplace remains browsable, but the
-wallet control renders as unavailable until the variable is configured. Marketplace
-reads use the existing Random Walk backend plus verified Arbitrum contract reads;
-keep the backend URLs and contract addresses in `env.example` aligned with
-production sources.
+Deployments still build without it so the marketplace remains browsable, but a
+real project ID should be configured in Vercel for reliable WalletConnect QR and
+mobile wallet support. Marketplace reads use the existing Random Walk backend
+plus verified Arbitrum contract reads; keep the backend URLs and contract
+addresses in `env.example` aligned with production sources.
 
 ## Marketplace Architecture
 
