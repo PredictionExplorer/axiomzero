@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ArrowUpRight, Equal, Percent, Sparkles } from "lucide-react";
 
 import { collections } from "@/config/collections";
@@ -7,9 +8,80 @@ import {
   FOUNDATION_STATEMENT,
   ZERO_PROMISES,
 } from "@/lib/brand";
+import {
+  getMarketplaceOffers,
+  getMarketplaceStats,
+} from "@/lib/marketplace/queries";
+import {
+  collectionPath,
+  MY_NFTS_PATH,
+  tokenPath,
+} from "@/lib/marketplace/routes";
+import type { Collection, MarketOffer } from "@/lib/marketplace/types";
+import { formatEth, formatTokenId } from "@/lib/utils";
 import { ButtonLink } from "@/components/ui/button";
 
-export default function Home() {
+async function getCollectionStats(collection: Collection) {
+  const offers = await getMarketplaceOffers({
+    collection: collection.id,
+    kind: "all",
+    sort: "price-asc",
+    view: "discover",
+  });
+
+  return {
+    collection,
+    stats: getMarketplaceStats(offers),
+  };
+}
+
+function MarketMetric({
+  label,
+  offer,
+  emptyLabel,
+  collection,
+}: {
+  label: string;
+  offer: MarketOffer | undefined;
+  emptyLabel: string;
+  collection: Collection;
+}) {
+  const content = (
+    <>
+      <span className="text-xs uppercase tracking-[0.24em] text-bone/70">
+        {label}
+      </span>
+      <span className="mt-3 block text-2xl font-semibold text-ivory">
+        {offer ? formatEth(offer.priceEth) : "N/A"}
+      </span>
+      <span className="mt-2 block text-xs leading-5 text-bone/72">
+        {offer
+          ? `${collection.shortName} ${formatTokenId(offer.tokenId)}`
+          : emptyLabel}
+      </span>
+    </>
+  );
+  const className =
+    "rounded-[1.35rem] border border-ivory/10 bg-ink/50 p-4 text-left transition";
+
+  return offer ? (
+    <Link
+      href={tokenPath(offer.collectionId, offer.tokenId)}
+      aria-label={`${collection.shortName} ${label} ${formatEth(
+        offer.priceEth,
+      )}`}
+      className={`${className} hover:border-copper/35 hover:bg-ivory/[0.07] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-chartreuse`}
+    >
+      {content}
+    </Link>
+  ) : (
+    <div className={className}>{content}</div>
+  );
+}
+
+export default async function Home() {
+  const collectionMarkets = await Promise.all(collections.map(getCollectionStats));
+
   return (
     <div className="overflow-hidden">
       <section className="mx-auto grid max-w-7xl gap-12 px-5 py-20 sm:px-8 lg:grid-cols-[1.04fr_0.96fr] lg:py-28">
@@ -22,12 +94,18 @@ export default function Home() {
           </h1>
           <p className="mt-7 max-w-2xl text-lg leading-8 text-bone/74">
             {BRAND_TAGLINE} Browse Random Walk and Cosmic Signature NFTs in a
-            0% fee marketplace built for fair-launch generative art.
+            0% fee market built for fair-launch generative art.
           </p>
           <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-            <ButtonLink href="/marketplace">Enter marketplace</ButtonLink>
-            <ButtonLink href="#collections" variant="secondary">
-              View collections
+            <ButtonLink href={MY_NFTS_PATH}>My NFTs</ButtonLink>
+            <ButtonLink href={collectionPath("random-walk")} variant="secondary">
+              Random Walk
+            </ButtonLink>
+            <ButtonLink
+              href={collectionPath("cosmic-signature")}
+              variant="secondary"
+            >
+              Cosmic Signature
             </ButtonLink>
           </div>
         </div>
@@ -53,13 +131,33 @@ export default function Home() {
 
       <section
         id="collections"
-        className="mx-auto grid max-w-7xl gap-4 px-5 pb-20 sm:px-8 lg:grid-cols-2"
+        className="mx-auto grid max-w-7xl gap-4 px-5 pb-20 sm:px-8 lg:grid-cols-3"
       >
-        {collections.map((collection) => (
-          <a
+        <article className="rounded-[2rem] border border-copper/20 bg-copper/10 p-6">
+          <div className="flex items-start justify-between gap-5">
+            <div>
+              <p className="text-xs uppercase tracking-[0.28em] text-copper">
+                wallet workspace
+              </p>
+              <h2 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-ivory">
+                My NFTs
+              </h2>
+            </div>
+            <ArrowUpRight className="text-bone/75" />
+          </div>
+          <p className="mt-5 leading-7 text-bone/78">
+            Connect your wallet to see owned NFTs, review bids, and manage
+            listings across both Axiom Zero collections.
+          </p>
+          <ButtonLink href={MY_NFTS_PATH} className="mt-6" variant="secondary">
+            Open My NFTs
+          </ButtonLink>
+        </article>
+
+        {collectionMarkets.map(({ collection, stats }) => (
+          <article
             key={collection.id}
-            href={`/marketplace?collection=${collection.id}`}
-            className="group rounded-[2rem] border border-ivory/10 bg-ivory/[0.045] p-6 transition hover:-translate-y-1 hover:border-copper/35 hover:bg-ivory/[0.07]"
+            className="rounded-[2rem] border border-ivory/10 bg-ivory/[0.045] p-6 transition hover:-translate-y-1 hover:border-copper/35 hover:bg-ivory/[0.07]"
           >
             <div className="flex items-start justify-between gap-5">
               <div>
@@ -70,7 +168,7 @@ export default function Home() {
                   {collection.shortName}
                 </h2>
               </div>
-              <ArrowUpRight className="text-bone/75 transition group-hover:text-chartreuse" />
+              <ArrowUpRight className="text-bone/75 transition" />
             </div>
             <p className="mt-5 max-w-xl leading-7 text-bone/78">
               {collection.description}
@@ -78,7 +176,30 @@ export default function Home() {
             <p className="mt-5 font-mono text-sm text-bone/75">
               {collection.artSystem}
             </p>
-          </a>
+
+            <div className="mt-6 grid gap-3">
+              <MarketMetric
+                label="Floor price"
+                offer={stats.floorOffer}
+                emptyLabel="No active listings"
+                collection={collection}
+              />
+              <MarketMetric
+                label="Highest bid"
+                offer={stats.topBidOffer}
+                emptyLabel="No active bids"
+                collection={collection}
+              />
+            </div>
+
+            <ButtonLink
+              href={collectionPath(collection.id)}
+              className="mt-6"
+              variant="secondary"
+            >
+              Explore {collection.shortName}
+            </ButtonLink>
+          </article>
         ))}
       </section>
 

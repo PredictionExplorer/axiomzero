@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("home page introduces Axiom Zero and links to the marketplace", async ({
+test("home page introduces Axiom Zero and links to collection pages", async ({
   page,
 }) => {
   await page.goto("/");
@@ -17,23 +17,23 @@ test("home page introduces Axiom Zero and links to the marketplace", async ({
   await expect(
     page.getByRole("button", { name: /wallet unavailable/i }),
   ).toHaveCount(0);
-  const marketplaceLink = page
-    .locator('a[href="/marketplace"]')
-    .filter({ hasText: /enter marketplace/i });
-  await expect(marketplaceLink).toBeVisible();
+  const randomWalkLink = page
+    .getByRole("main")
+    .getByRole("link", { name: /^random walk$/i });
+  await expect(randomWalkLink).toBeVisible();
   await Promise.all([
-    page.waitForURL(/\/marketplace/),
-    marketplaceLink.click(),
+    page.waitForURL(/\/random-walk/),
+    randomWalkLink.click(),
   ]);
   await expect(
-    page.getByRole("heading", { name: /generative nft marketplace/i }),
+    page.getByRole("heading", { name: /^random walk$/i }),
   ).toBeVisible();
 });
 
-test("marketplace views are URL-driven", async ({ page }) => {
-  await page.goto("/marketplace");
+test("collection market views are URL-driven", async ({ page }) => {
+  await page.goto("/random-walk");
   await expect(
-    page.getByRole("heading", { name: /generative nft marketplace/i }),
+    page.getByRole("heading", { name: /^random walk$/i }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: /connect wallet/i }),
@@ -50,21 +50,28 @@ test("marketplace views are URL-driven", async ({ page }) => {
   await expect(page).toHaveURL(/sort=price-desc/);
 });
 
-test("marketplace preserves collection filters from the URL", async ({ page }) => {
-  await page.goto("/marketplace?collection=cosmic-signature");
+test("collection market preserves filters from the URL", async ({ page }) => {
+  await page.goto("/cosmic-signature?query=1");
   await page.getByRole("link", { name: /top bids/i }).click();
 
-  await expect(page).toHaveURL(/collection=cosmic-signature/);
+  await expect(page).toHaveURL(/\/cosmic-signature/);
+  await expect(page).toHaveURL(/query=1/);
   await expect(page).toHaveURL(/filter=buy/);
 });
 
 test("owned NFT workspace prompts for a connected wallet", async ({ page }) => {
-  await page.goto("/marketplace?view=my-nfts");
+  await page.goto("/my-nfts");
 
   await expect(
     page.getByRole("heading", { name: /your nfts, listings, and bid alerts/i }),
   ).toBeVisible();
   await expect(page.getByText(/connect a wallet to scan/i)).toBeVisible();
+});
+
+test("old marketplace URL is not a public route", async ({ page }) => {
+  const response = await page.goto("/marketplace");
+
+  expect(response?.status()).toBe(404);
 });
 
 test("token detail page shows order book and wallet prompt", async ({

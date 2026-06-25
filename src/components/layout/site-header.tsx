@@ -2,18 +2,12 @@ import Link from "next/link";
 
 import { ConnectWalletButton } from "@/components/wallet/connect-wallet-button";
 import { BRAND_NAME } from "@/lib/brand";
+import { collectionPath, MY_NFTS_PATH } from "@/lib/marketplace/routes";
 
 const navItems = [
-  { href: "/marketplace", label: "Marketplace" },
-  { href: "/marketplace?view=my-nfts", label: "My NFTs" },
-  {
-    href: "/marketplace?view=listings&collection=random-walk&sort=price-asc",
-    label: "Random Walk",
-  },
-  {
-    href: "/marketplace?view=listings&collection=cosmic-signature&sort=price-asc",
-    label: "Cosmic Signature",
-  },
+  { href: MY_NFTS_PATH, label: "My NFTs" },
+  { href: collectionPath("random-walk"), label: "Random Walk" },
+  { href: collectionPath("cosmic-signature"), label: "Cosmic Signature" },
 ];
 
 export function SiteHeader() {

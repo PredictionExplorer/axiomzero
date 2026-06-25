@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import type { MarketplaceStats } from "@/lib/marketplace/types";
+import { tokenPath } from "@/lib/marketplace/routes";
 import { formatEth } from "@/lib/utils";
 
 const statLabel = (value: number | undefined) =>
@@ -8,7 +9,7 @@ const statLabel = (value: number | undefined) =>
 
 const tokenHref = (
   offer: MarketplaceStats["floorOffer"] | MarketplaceStats["topBidOffer"],
-) => (offer ? `/token/${offer.collectionId}/${offer.tokenId}` : undefined);
+) => (offer ? tokenPath(offer.collectionId, offer.tokenId) : undefined);
 
 export function MarketplaceStatsGrid({ stats }: { stats: MarketplaceStats }) {
   const items = [

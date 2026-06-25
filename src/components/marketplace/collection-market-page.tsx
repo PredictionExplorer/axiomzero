@@ -1,70 +1,44 @@
-import type { Metadata } from "next";
-
-import { collections } from "@/config/collections";
+import { requireCollection } from "@/config/collections";
 import { MarketplaceCard } from "@/components/marketplace/marketplace-card";
 import { MarketplaceControls } from "@/components/marketplace/marketplace-controls";
 import { MarketplaceStatsGrid } from "@/components/marketplace/marketplace-stats";
 import { MarketplaceTokenCard } from "@/components/marketplace/marketplace-token-card";
-import { MyNftsPanel } from "@/components/marketplace/my-nfts-panel";
 import {
   getMarketplaceOffers,
   getMarketplaceStats,
   getMarketplaceTokenPage,
   parseMarketplaceSearchParams,
 } from "@/lib/marketplace/queries";
-import type { MarketplaceSearchParams } from "@/lib/marketplace/types";
-
-export const metadata: Metadata = {
-  title: "Marketplace",
-  description:
-    "Buy and sell Random Walk and Cosmic Signature NFTs with zero platform fees. Filter by collection, price, token ID, or offer type.",
-};
+import { collectionMarketHref } from "@/lib/marketplace/routes";
+import type {
+  CollectionId,
+  MarketplaceSearchParams,
+} from "@/lib/marketplace/types";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-function marketplaceHref(search: MarketplaceSearchParams, page: number) {
-  const params = new URLSearchParams();
-
-  params.set("view", search.view ?? "discover");
-  params.set("page", String(page));
-  if (search.pageSize) {
-    params.set("pageSize", String(search.pageSize));
-  }
-  if (search.collection && search.collection !== "all") {
-    params.set("collection", search.collection);
-  }
-  if (search.query) {
-    params.set("query", search.query);
-  }
-  if (search.min !== undefined) {
-    params.set("min", String(search.min));
-  }
-  if (search.max !== undefined) {
-    params.set("max", String(search.max));
-  }
-  if (search.sort) {
-    params.set("sort", search.sort);
-  }
-
-  return `/marketplace?${params.toString()}`;
-}
-
-export default async function MarketplacePage({
-  searchParams,
-}: {
+type CollectionMarketPageProps = {
+  collectionId: CollectionId;
   searchParams: SearchParams;
-}) {
+};
+
+export async function CollectionMarketPage({
+  collectionId,
+  searchParams,
+}: CollectionMarketPageProps) {
+  const collection = requireCollection(collectionId);
   const resolvedSearchParams = await searchParams;
-  const search = parseMarketplaceSearchParams(resolvedSearchParams);
+  const search = {
+    ...parseMarketplaceSearchParams(resolvedSearchParams),
+    collection: collectionId,
+  } satisfies MarketplaceSearchParams;
   const activeView = search.view ?? "discover";
   const offerSearch =
     activeView === "top-bids"
       ? { ...search, kind: "buy" as const, sort: "price-desc" as const }
       : activeView === "listings"
         ? { ...search, kind: "sell" as const }
-        : activeView === "discover"
-          ? { ...search, kind: "all" as const }
-          : { ...search, kind: "buy" as const, sort: "price-desc" as const };
+        : { ...search, kind: "all" as const };
   const statsSearch = { ...search, kind: "all" as const };
   const [visibleOffers, statsOffers, tokenPage] = await Promise.all([
     getMarketplaceOffers(offerSearch),
@@ -82,31 +56,34 @@ export default async function MarketplacePage({
       <section className="grid gap-8 lg:grid-cols-[1fr_0.72fr] lg:items-end">
         <div>
           <p className="text-sm uppercase tracking-[0.42em] text-copper">
-            Zero-fee marketplace
+            Zero-fee collection market
           </p>
           <h1 className="mt-5 max-w-4xl text-5xl font-semibold tracking-[-0.06em] text-ivory sm:text-7xl">
-            Generative NFT Marketplace
+            {collection.shortName}
           </h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-bone/70">
-            Discover NFTs in focused pages, browse the strongest bids, place
-            bids from token detail, and list owned work without leaving the
-            marketplace.
+            {collection.description} Browse the floor, strongest bids, and
+            focused discovery pages without leaving the collection.
           </p>
         </div>
 
         <div className="rounded-[2rem] border border-copper/20 bg-copper/10 p-5">
           <p className="text-xs uppercase tracking-[0.26em] text-copper">
-            Live collection markets
+            {collection.supplyLabel}
           </p>
           <p className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-ivory">
-            A calmer surface for thousands of tokens: search, page, and act with
-            wallet-aware controls instead of scrolling forever.
+            {collection.artSystem}
+          </p>
+          <p className="mt-4 text-sm leading-6 text-bone/75">
+            View live listings, highest bids, and token detail pages for a
+            clean collection-specific market.
           </p>
         </div>
       </section>
 
       <div className="mt-10">
         <MarketplaceControls
+          collectionId={collectionId}
           search={search}
           totalOffers={visibleOffers.length}
         />
@@ -124,7 +101,7 @@ export default async function MarketplacePage({
                 Discover
               </p>
               <h2 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-ivory">
-                Browse a focused page of NFTs
+                Browse {collection.shortName} NFTs
               </h2>
             </div>
             <p className="rounded-full border border-ivory/10 bg-ivory/[0.045] px-4 py-2 text-sm text-bone/75">
@@ -143,17 +120,22 @@ export default async function MarketplacePage({
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <a
-              href={marketplaceHref(search, Math.max(1, tokenPage.page - 1))}
+              href={collectionMarketHref({
+                collectionId,
+                search,
+                page: Math.max(1, tokenPage.page - 1),
+              })}
               aria-disabled={tokenPage.page <= 1}
               className="inline-flex h-11 items-center justify-center rounded-full border border-ivory/15 bg-ivory/[0.04] px-5 text-sm font-semibold text-ivory transition hover:bg-ivory/[0.09] aria-disabled:pointer-events-none aria-disabled:opacity-45"
             >
               Previous page
             </a>
             <a
-              href={marketplaceHref(
+              href={collectionMarketHref({
+                collectionId,
                 search,
-                Math.min(tokenPage.totalPages, tokenPage.page + 1),
-              )}
+                page: Math.min(tokenPage.totalPages, tokenPage.page + 1),
+              })}
               aria-disabled={tokenPage.page >= tokenPage.totalPages}
               className="inline-flex h-11 items-center justify-center rounded-full bg-copper px-5 text-sm font-semibold text-ink transition hover:bg-ember aria-disabled:pointer-events-none aria-disabled:opacity-45"
             >
@@ -190,15 +172,7 @@ export default async function MarketplacePage({
         </section>
       ) : null}
 
-      {activeView === "my-nfts" ? (
-        <div className="mt-12">
-          <MyNftsPanel collections={collections} />
-        </div>
-      ) : null}
-
-      {activeView !== "my-nfts" &&
-      !visibleOffers.length &&
-      !tokenPage?.items.length ? (
+      {!visibleOffers.length && !tokenPage?.items.length ? (
         <div className="mt-12 rounded-[2rem] border border-ivory/10 bg-ivory/[0.045] p-8 text-center">
           <h2 className="text-2xl font-semibold text-ivory">
             Nothing matched this view

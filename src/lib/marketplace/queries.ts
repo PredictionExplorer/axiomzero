@@ -27,7 +27,6 @@ const marketplaceViews = new Set([
   "discover",
   "listings",
   "top-bids",
-  "my-nfts",
 ]);
 const sortKeys = new Set(["price-asc", "price-desc", "recent"]);
 const DEFAULT_TOKEN_PAGE = 1;

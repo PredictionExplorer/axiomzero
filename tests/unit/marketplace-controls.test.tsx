@@ -7,6 +7,7 @@ describe("MarketplaceControls", () => {
   it("shows view navigation and preserves selected query state", () => {
     const { container } = render(
       <MarketplaceControls
+        collectionId="cosmic-signature"
         search={{
           collection: "cosmic-signature",
           kind: "sell",
@@ -17,22 +18,25 @@ describe("MarketplaceControls", () => {
       />,
     );
 
+    expect(container.querySelector("form")).toHaveAttribute(
+      "action",
+      "/cosmic-signature",
+    );
     expect(
       screen.getByRole("link", { name: /^listings/i }),
     ).toHaveAttribute(
       "href",
-      expect.stringContaining("collection=cosmic-signature"),
+      "/cosmic-signature?view=listings&filter=sell&sort=price-asc",
     );
     expect(container.querySelector('input[name="view"]')).toHaveValue("listings");
-    expect(screen.getByLabelText(/filter by collection/i)).toHaveValue(
-      "cosmic-signature",
-    );
+    expect(screen.queryByLabelText(/filter by collection/i)).toBeNull();
     expect(screen.getByText("2 entries")).toBeInTheDocument();
   });
 
   it("links top bids to the highest-bid offer view", () => {
     render(
       <MarketplaceControls
+        collectionId="random-walk"
         search={{ collection: "all", kind: "buy", view: "top-bids" }}
         totalOffers={0}
       />,
@@ -40,6 +44,9 @@ describe("MarketplaceControls", () => {
 
     expect(
       screen.getByRole("link", { name: /^top bids/i }),
-    ).toHaveAttribute("href", expect.stringContaining("sort=price-desc"));
+    ).toHaveAttribute(
+      "href",
+      "/random-walk?view=top-bids&filter=buy&sort=price-desc",
+    );
   });
 });

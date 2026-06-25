@@ -4,7 +4,7 @@ export type OfferKind = "sell" | "buy";
 
 export type SortKey = "price-asc" | "price-desc" | "recent";
 
-export type MarketplaceView = "discover" | "listings" | "top-bids" | "my-nfts";
+export type MarketplaceView = "discover" | "listings" | "top-bids";
 
 export type Collection = {
   id: CollectionId;

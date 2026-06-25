@@ -8,26 +8,26 @@ vi.mock("@/components/wallet/connect-wallet-button", () => ({
 import { SiteHeader } from "@/components/layout/site-header";
 
 describe("SiteHeader", () => {
-  it("shows navigation and the wallet action without the redundant browse CTA", () => {
+  it("shows the three public destination links and the wallet action", () => {
     render(<SiteHeader />);
 
-    expect(screen.getByRole("link", { name: /marketplace/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /my nfts/i })).toHaveAttribute(
       "href",
-      "/marketplace",
+      "/my-nfts",
     );
     expect(screen.getByRole("link", { name: /random walk/i })).toHaveAttribute(
       "href",
-      "/marketplace?view=listings&collection=random-walk&sort=price-asc",
+      "/random-walk",
     );
     expect(
       screen.getByRole("link", { name: /cosmic signature/i }),
-    ).toHaveAttribute(
-      "href",
-      "/marketplace?view=listings&collection=cosmic-signature&sort=price-asc",
-    );
+    ).toHaveAttribute("href", "/cosmic-signature");
     expect(
       screen.getByRole("button", { name: /connect wallet/i }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /marketplace/i }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: /browse market/i }),
     ).not.toBeInTheDocument();

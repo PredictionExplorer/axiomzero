@@ -3,6 +3,7 @@ import Image from "next/image";
 import { requireCollection } from "@/config/collections";
 import type { TokenMarketSummary } from "@/lib/marketplace/types";
 import { ButtonLink } from "@/components/ui/button";
+import { tokenPath } from "@/lib/marketplace/routes";
 import { formatEth, formatTokenId, shortenAddress } from "@/lib/utils";
 
 export function MarketplaceTokenCard({
@@ -68,7 +69,7 @@ export function MarketplaceTokenCard({
               : "No active orders"}
           </p>
           <ButtonLink
-            href={`/token/${item.token.collectionId}/${item.token.tokenId}`}
+            href={tokenPath(item.token.collectionId, item.token.tokenId)}
             variant="secondary"
           >
             View and bid

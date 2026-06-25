@@ -2,7 +2,11 @@
   "ci": {
     "collect": {
       "startServerCommand": "corepack pnpm start",
-      "url": ["http://localhost:3000/", "http://localhost:3000/marketplace"],
+      "url": [
+        "http://localhost:3000/",
+        "http://localhost:3000/random-walk",
+        "http://localhost:3000/cosmic-signature"
+      ],
       "numberOfRuns": 1
     },
     "assert": {

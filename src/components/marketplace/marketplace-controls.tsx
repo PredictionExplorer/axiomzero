@@ -1,4 +1,11 @@
-import type { MarketplaceSearchParams } from "@/lib/marketplace/types";
+import type {
+  CollectionId,
+  MarketplaceSearchParams,
+} from "@/lib/marketplace/types";
+import {
+  collectionMarketHref,
+  collectionPath,
+} from "@/lib/marketplace/routes";
 
 const views = [
   {
@@ -16,46 +23,14 @@ const views = [
     label: "Top bids",
     description: "Highest bids first",
   },
-  {
-    id: "my-nfts",
-    label: "My NFTs",
-    description: "List owned tokens",
-  },
 ] as const;
 
-function viewHref(view: (typeof views)[number]["id"], search: MarketplaceSearchParams) {
-  const params = new URLSearchParams();
-
-  params.set("view", view);
-  if (search.collection && search.collection !== "all") {
-    params.set("collection", search.collection);
-  }
-  if (search.query) {
-    params.set("query", search.query);
-  }
-  if (search.min !== undefined) {
-    params.set("min", String(search.min));
-  }
-  if (search.max !== undefined) {
-    params.set("max", String(search.max));
-  }
-  if (view === "top-bids") {
-    params.set("filter", "buy");
-    params.set("sort", "price-desc");
-  } else if (view === "listings") {
-    params.set("filter", "sell");
-    params.set("sort", "price-asc");
-  } else if (search.sort) {
-    params.set("sort", search.sort);
-  }
-
-  return `/marketplace?${params.toString()}`;
-}
-
 export function MarketplaceControls({
+  collectionId,
   search,
   totalOffers,
 }: {
+  collectionId: CollectionId;
   search: MarketplaceSearchParams;
   totalOffers: number;
 }) {
@@ -63,7 +38,7 @@ export function MarketplaceControls({
 
   return (
     <form
-      action="/marketplace"
+      action={collectionPath(collectionId)}
       className="space-y-5 rounded-[2rem] border border-ivory/10 bg-ivory/[0.045] p-5 shadow-[0_24px_90px_rgba(0,0,0,0.22)]"
     >
       <input type="hidden" name="view" value={activeView} />
@@ -83,7 +58,7 @@ export function MarketplaceControls({
             {totalOffers} entries
           </span>
           <a
-            href="/marketplace"
+            href={collectionPath(collectionId)}
             className="rounded-full px-3 py-1 text-sm text-bone transition hover:bg-ivory/[0.07] hover:text-ivory"
           >
             Reset
@@ -95,7 +70,7 @@ export function MarketplaceControls({
         {views.map((view) => (
           <a
             key={view.id}
-            href={viewHref(view.id, search)}
+            href={collectionMarketHref({ collectionId, search, view: view.id })}
             className={`rounded-2xl border p-4 transition ${
               activeView === view.id
                 ? "border-copper/50 bg-copper/12 text-ivory"
@@ -110,22 +85,7 @@ export function MarketplaceControls({
         ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto]">
-        <label className="space-y-2">
-          <span className="text-xs uppercase tracking-[0.24em] text-bone/75">
-            Collection
-          </span>
-          <select
-            name="collection"
-            defaultValue={search.collection ?? "all"}
-            aria-label="Filter by collection"
-            className="h-12 w-full rounded-2xl border border-ivory/10 bg-ink px-4 text-sm text-ivory outline-none transition focus:border-chartreuse"
-          >
-            <option value="all">All collections</option>
-            <option value="random-walk">Random Walk</option>
-            <option value="cosmic-signature">Cosmic Signature</option>
-          </select>
-        </label>
+      <div className="grid gap-4 lg:grid-cols-[1fr_1fr_1fr_1fr_auto]">
         <label className="space-y-2">
           <span className="text-xs uppercase tracking-[0.24em] text-bone/75">
             Token ID

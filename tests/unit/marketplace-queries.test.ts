@@ -81,6 +81,7 @@ describe("marketplace queries", () => {
         kind: "vip",
         min: "-1",
         sort: "mystery",
+        view: "my-nfts",
       }),
     ).toMatchObject({
       collection: "all",

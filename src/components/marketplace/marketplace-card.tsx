@@ -2,6 +2,7 @@ import Image from "next/image";
 
 import { requireCollection } from "@/config/collections";
 import type { MarketOffer } from "@/lib/marketplace/types";
+import { tokenPath } from "@/lib/marketplace/routes";
 import {
   formatDate,
   formatEth,
@@ -67,7 +68,7 @@ export function MarketplaceCard({ offer }: { offer: MarketOffer }) {
               : formatDate(offer.createdAt)}
           </p>
           <ButtonLink
-            href={`/token/${offer.collectionId}/${offer.tokenId}`}
+            href={tokenPath(offer.collectionId, offer.tokenId)}
             variant="secondary"
           >
             View token
