@@ -12,7 +12,7 @@ test("home page introduces Axiom Zero and links to the marketplace", async ({
     page.getByText(/Founders get no special privilege/i),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: /connect wallet/i }),
+    page.getByRole("button", { name: /connect wallet|wallet unavailable/i }),
   ).toBeVisible();
   const marketplaceLink = page
     .locator('a[href="/marketplace"]')
@@ -29,6 +29,12 @@ test("home page introduces Axiom Zero and links to the marketplace", async ({
 
 test("marketplace filters are URL-driven", async ({ page }) => {
   await page.goto("/marketplace");
+  await expect(
+    page.getByRole("heading", { name: /generative nft marketplace/i }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /connect wallet|wallet unavailable/i }),
+  ).toBeVisible();
   await page.getByRole("button", { name: /buy offers/i }).click();
 
   await expect(page).toHaveURL(/filter=buy/);

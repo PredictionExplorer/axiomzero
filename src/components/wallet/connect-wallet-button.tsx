@@ -4,8 +4,31 @@ import { ConnectButton } from "@rainbow-me/rainbowkit";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  isWalletConnectConfigured,
+  walletConfigurationWarning,
+} from "@/lib/web3/config";
 
 export function ConnectWalletButton({ className }: { className?: string }) {
+  if (!isWalletConnectConfigured) {
+    return (
+      <div className={cn("connect-wallet", className)}>
+        <Button
+          aria-describedby="wallet-config-warning"
+          disabled
+          title={walletConfigurationWarning}
+          type="button"
+          variant="secondary"
+        >
+          Wallet unavailable
+        </Button>
+        <span id="wallet-config-warning" className="sr-only">
+          {walletConfigurationWarning}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <ConnectButton.Custom>
       {({

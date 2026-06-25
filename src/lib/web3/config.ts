@@ -4,20 +4,17 @@ import { getDefaultConfig } from "@rainbow-me/rainbowkit";
 import { arbitrum, arbitrumSepolia } from "wagmi/chains";
 
 const WALLETCONNECT_PLACEHOLDER = "00000000000000000000000000000000";
-const isVercelProduction = process.env.VERCEL_ENV === "production";
-const walletConnectProjectId =
-  process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ??
-  (isVercelProduction ? undefined : WALLETCONNECT_PLACEHOLDER);
+export const walletConnectProjectId =
+  process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID?.trim() || undefined;
+export const isWalletConnectConfigured = Boolean(walletConnectProjectId);
+export const walletConfigurationWarning =
+  "Wallet connections require NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID. Browsing stays available, but wallet actions are disabled until it is configured.";
 
-if (!walletConnectProjectId) {
-  throw new Error(
-    "NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID is required for production wallet connections.",
-  );
-}
+const wagmiProjectId = walletConnectProjectId ?? WALLETCONNECT_PLACEHOLDER;
 
 export const wagmiConfig = getDefaultConfig({
   appName: "Axiom Zero",
-  projectId: walletConnectProjectId,
+  projectId: wagmiProjectId,
   chains: [arbitrum, arbitrumSepolia],
   ssr: true,
 });
