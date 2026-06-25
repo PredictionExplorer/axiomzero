@@ -8,6 +8,7 @@ equal access, zero privilege.
 
 - Next.js App Router, React, TypeScript, Tailwind CSS v4
 - Wagmi, Viem, RainbowKit, TanStack Query
+- Next.js route handlers for normalized marketplace reads
 - Vitest, Testing Library, fast-check, Playwright, axe, Lighthouse CI
 - Vercel-ready server-rendered pages with small wallet client islands
 
@@ -22,6 +23,19 @@ Open [http://localhost:3000](http://localhost:3000).
 
 Copy `env.example` to `.env.local` and fill in production values before wallet
 testing or deployment.
+
+Wallet connections require a real `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` outside
+local development. Marketplace reads use the existing Random Walk backend plus
+verified Arbitrum contract reads; keep the backend URLs and contract addresses in
+`env.example` aligned with production sources.
+
+## Marketplace Architecture
+
+The UI reads normalized marketplace data through `src/app/api/marketplace/**`.
+Random Walk data is sourced from the existing backend that powers
+`randomwalknft.com`, while Cosmic Signature offers are read from the configured
+Arbitrum marketplace contract. Wallet actions are signed client-side with wagmi
+and viem, then the app refreshes server-rendered data after confirmations.
 
 ## Quality Gates
 

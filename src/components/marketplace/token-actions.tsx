@@ -1,17 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { parseEther } from "viem";
-import { useAccount, usePublicClient, useWriteContract } from "wagmi";
+import {
+  useAccount,
+  usePublicClient,
+  useSwitchChain,
+  useWriteContract,
+} from "wagmi";
+import { arbitrum } from "wagmi/chains";
 import { toast } from "sonner";
 
 import { ConnectWalletButton } from "@/components/wallet/connect-wallet-button";
-import { AppProviders } from "@/components/providers/app-providers";
 import type { Collection, MarketOffer } from "@/lib/marketplace/types";
 import { Button } from "@/components/ui/button";
 import { erc721Abi, marketplaceAbi } from "@/lib/web3/abis";
 import { prepareContractWrite } from "@/lib/web3/transaction-preflight";
 import { formatEth } from "@/lib/utils";
+import {
+  isPositiveEthAmount,
+  sameAddress,
+} from "@/lib/marketplace/trading-actions";
 
 export function TokenActions({
   collection,
@@ -25,14 +35,12 @@ export function TokenActions({
   offers: MarketOffer[];
 }) {
   return (
-    <AppProviders>
-      <TokenActionsInner
-        collection={collection}
-        tokenId={tokenId}
-        activeSellOffer={activeSellOffer}
-        offers={offers}
-      />
-    </AppProviders>
+    <TokenActionsInner
+      collection={collection}
+      tokenId={tokenId}
+      activeSellOffer={activeSellOffer}
+      offers={offers}
+    />
   );
 }
 
@@ -47,19 +55,164 @@ function TokenActionsInner({
   activeSellOffer?: MarketOffer;
   offers: MarketOffer[];
 }) {
-  const { address, isConnected } = useAccount();
+  const router = useRouter();
+  const { address, chainId, isConnected } = useAccount();
   const publicClient = usePublicClient();
+  const { switchChainAsync } = useSwitchChain();
   const { writeContractAsync } = useWriteContract();
   const [price, setPrice] = useState("");
   const [isPending, setIsPending] = useState(false);
+  const [tokenOwner, setTokenOwner] = useState<`0x${string}`>();
+  const [isApprovedForMarketplace, setIsApprovedForMarketplace] =
+    useState(false);
+  const [tokenStateError, setTokenStateError] = useState<string>();
+
+  const isCorrectChain = chainId === arbitrum.id;
+  const isOwner = sameAddress(address, tokenOwner);
+
+  const refreshTokenState = useCallback(async () => {
+    if (!publicClient) {
+      return;
+    }
+
+    try {
+      const owner = (await publicClient.readContract({
+        address: collection.nftAddress,
+        abi: erc721Abi,
+        functionName: "ownerOf",
+        args: [BigInt(tokenId)],
+      })) as `0x${string}`;
+      const approved = address
+        ? ((await publicClient.readContract({
+            address: collection.nftAddress,
+            abi: erc721Abi,
+            functionName: "isApprovedForAll",
+            args: [address, collection.marketplaceAddress],
+          })) as boolean)
+        : false;
+
+      setTokenOwner(owner);
+      setIsApprovedForMarketplace(approved);
+      setTokenStateError(undefined);
+    } catch (error) {
+      setTokenStateError(
+        error instanceof Error
+          ? error.message
+          : "Token ownership could not be loaded.",
+      );
+    }
+  }, [
+    address,
+    collection.marketplaceAddress,
+    collection.nftAddress,
+    publicClient,
+    tokenId,
+  ]);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    async function loadTokenState() {
+      if (!publicClient) {
+        return;
+      }
+
+      try {
+        const owner = (await publicClient.readContract({
+          address: collection.nftAddress,
+          abi: erc721Abi,
+          functionName: "ownerOf",
+          args: [BigInt(tokenId)],
+        })) as `0x${string}`;
+        const approved = address
+          ? ((await publicClient.readContract({
+              address: collection.nftAddress,
+              abi: erc721Abi,
+              functionName: "isApprovedForAll",
+              args: [address, collection.marketplaceAddress],
+            })) as boolean)
+          : false;
+
+        if (!isCurrent) {
+          return;
+        }
+
+        setTokenOwner(owner);
+        setIsApprovedForMarketplace(approved);
+        setTokenStateError(undefined);
+      } catch (error) {
+        if (!isCurrent) {
+          return;
+        }
+
+        setTokenStateError(
+          error instanceof Error
+            ? error.message
+            : "Token ownership could not be loaded.",
+        );
+      }
+    }
+
+    void loadTokenState();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [
+    address,
+    collection.marketplaceAddress,
+    collection.nftAddress,
+    publicClient,
+    tokenId,
+  ]);
+
+  const ownOffers = useMemo(
+    () =>
+      address
+        ? offers.filter(
+            (offer) => sameAddress(offer.maker, address) && offer.offerId,
+          )
+        : [],
+    [address, offers],
+  );
+
+  const walletBlocker = !isConnected
+    ? "Connect a wallet to activate trading controls."
+    : !isCorrectChain
+      ? "Switch to Arbitrum to trade through the marketplace contract."
+      : undefined;
+  const amountBlocker = isPositiveEthAmount(price)
+    ? undefined
+    : "Enter a valid ETH amount.";
+  const listingBlocker =
+    walletBlocker ??
+    amountBlocker ??
+    (!isOwner ? "Only the current owner can list this NFT." : undefined);
+  const bidBlocker =
+    walletBlocker ??
+    amountBlocker ??
+    (isOwner ? "Owners cannot bid on their own NFT." : undefined);
+  const buyBlocker =
+    walletBlocker ??
+    (activeSellOffer && sameAddress(activeSellOffer.maker, address)
+      ? "You cannot buy your own listing."
+      : undefined);
 
   async function runTransaction(action: () => Promise<`0x${string}`>) {
     try {
       setIsPending(true);
+      if (!isConnected) {
+        throw new Error("Connect your wallet to continue.");
+      }
+      if (!isCorrectChain) {
+        await switchChainAsync({ chainId: arbitrum.id });
+      }
       const hash = await action();
       toast.success("Transaction submitted", { description: hash });
       await publicClient?.waitForTransactionReceipt({ hash });
       toast.success("Transaction confirmed");
+      await refreshTokenState();
+      router.refresh();
     } catch (error) {
       toast.error("Transaction failed", {
         description:
@@ -77,26 +230,34 @@ function TokenActionsInner({
       throw new Error("Connect your wallet to continue.");
     }
 
-    if (!price || Number(price) <= 0) {
+    if (!isPositiveEthAmount(price)) {
       throw new Error("Enter a valid ETH price.");
     }
 
-    const approvalPrepared = await prepareContractWrite({
-      publicClient,
-      account: address,
-      address: collection.nftAddress,
-      abi: erc721Abi,
-      functionName: "setApprovalForAll",
-      args: [collection.marketplaceAddress, true],
-    });
-    const approvalHash = await writeContractAsync({
-      address: collection.nftAddress,
-      abi: erc721Abi,
-      functionName: "setApprovalForAll",
-      args: [collection.marketplaceAddress, true],
-      ...approvalPrepared,
-    });
-    await publicClient.waitForTransactionReceipt({ hash: approvalHash });
+    if (!isOwner) {
+      throw new Error("Only the current token owner can list this NFT.");
+    }
+
+    if (!isApprovedForMarketplace) {
+      const approvalPrepared = await prepareContractWrite({
+        publicClient,
+        account: address,
+        address: collection.nftAddress,
+        abi: erc721Abi,
+        functionName: "setApprovalForAll",
+        args: [collection.marketplaceAddress, true],
+      });
+      const approvalHash = await writeContractAsync({
+        address: collection.nftAddress,
+        abi: erc721Abi,
+        functionName: "setApprovalForAll",
+        args: [collection.marketplaceAddress, true],
+        ...approvalPrepared,
+      });
+      toast.success("Approval submitted", { description: approvalHash });
+      await publicClient.waitForTransactionReceipt({ hash: approvalHash });
+      toast.success("Marketplace approval confirmed");
+    }
 
     const prepared = await prepareContractWrite({
       publicClient,
@@ -121,7 +282,7 @@ function TokenActionsInner({
       throw new Error("Connect your wallet to continue.");
     }
 
-    if (!price || Number(price) <= 0) {
+    if (!isPositiveEthAmount(price)) {
       throw new Error("Enter a valid ETH price.");
     }
 
@@ -205,13 +366,6 @@ function TokenActionsInner({
     });
   }
 
-  const ownOffers = address
-    ? offers.filter(
-        (offer) =>
-          offer.maker.toLowerCase() === address.toLowerCase() && offer.offerId,
-      )
-    : [];
-
   return (
     <section className="rounded-[2rem] border border-ivory/10 bg-ivory/[0.045] p-5">
       <div>
@@ -227,6 +381,39 @@ function TokenActionsInner({
         </p>
       </div>
 
+      {walletBlocker || tokenStateError ? (
+        <div className="mt-5 rounded-2xl border border-copper/20 bg-copper/10 p-4 text-sm leading-6 text-bone/82">
+          <p>{walletBlocker ?? tokenStateError}</p>
+          {isConnected && !isCorrectChain ? (
+            <Button
+              className="mt-3"
+              onClick={() => void switchChainAsync({ chainId: arbitrum.id })}
+              type="button"
+              variant="secondary"
+            >
+              Switch to Arbitrum
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {isConnected && isCorrectChain && tokenOwner ? (
+        <div className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
+          <div className="rounded-2xl bg-ink/48 p-3">
+            <p className="text-bone/75">Ownership</p>
+            <p className="mt-1 font-semibold text-ivory">
+              {isOwner ? "Connected wallet owns this token" : "View-only wallet"}
+            </p>
+          </div>
+          <div className="rounded-2xl bg-ink/48 p-3">
+            <p className="text-bone/75">Marketplace approval</p>
+            <p className="mt-1 font-semibold text-ivory">
+              {isApprovedForMarketplace ? "Approved" : "Approval required"}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       {activeSellOffer ? (
         <div className="mt-5 rounded-2xl border border-chartreuse/20 bg-chartreuse/10 p-4">
           <p className="text-sm text-bone/78">Current listing</p>
@@ -235,7 +422,7 @@ function TokenActionsInner({
           </p>
           <Button
             className="mt-4 w-full"
-            disabled={!isConnected || isPending || !activeSellOffer.offerId}
+            disabled={Boolean(buyBlocker) || isPending || !activeSellOffer.offerId}
             onClick={() => void runTransaction(acceptSellOffer)}
           >
             Buy now for {formatEth(activeSellOffer.priceEth)}
@@ -245,6 +432,9 @@ function TokenActionsInner({
               Buying is disabled because this listing did not include an offer
               ID.
             </p>
+          ) : null}
+          {buyBlocker ? (
+            <p className="mt-2 text-xs text-bone/70">{buyBlocker}</p>
           ) : null}
         </div>
       ) : null}
@@ -264,19 +454,25 @@ function TokenActionsInner({
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <Button
-          disabled={!isConnected || isPending}
+          disabled={Boolean(listingBlocker) || isPending}
           onClick={() => void runTransaction(createSellOffer)}
         >
-          List token
+          {isApprovedForMarketplace ? "List token" : "Approve and list"}
         </Button>
         <Button
           variant="secondary"
-          disabled={!isConnected || isPending}
+          disabled={Boolean(bidBlocker) || isPending}
           onClick={() => void runTransaction(createBuyOffer)}
         >
           Bid
         </Button>
       </div>
+
+      {listingBlocker || bidBlocker ? (
+        <p className="mt-3 text-sm text-bone/75">
+          {listingBlocker ?? bidBlocker}
+        </p>
+      ) : null}
 
       {ownOffers.length ? (
         <div className="mt-5 space-y-3 rounded-2xl border border-ivory/10 bg-ink/45 p-4">
@@ -292,7 +488,7 @@ function TokenActionsInner({
               </span>
               <Button
                 variant="secondary"
-                disabled={isPending}
+                disabled={Boolean(walletBlocker) || isPending}
                 onClick={() => void runTransaction(() => cancelOffer(offer))}
               >
                 Cancel

@@ -4,62 +4,107 @@ import type {
   OfferKind,
   SortKey,
   TokenHistoryRecord,
-  TokenMediaAssets,
 } from "@/lib/marketplace/types";
+import { z } from "zod";
 
-const RANDOM_WALK_SITE_URL = "https://randomwalknft.com";
-const RANDOM_WALK_API_URL = "https://api.randomwalknft.com:1443";
+const RANDOM_WALK_SITE_URL =
+  process.env.RANDOM_WALK_SITE_URL ??
+  process.env.NEXT_PUBLIC_RANDOM_WALK_SITE_URL ??
+  "https://randomwalknft.com";
+const RANDOM_WALK_API_URL =
+  process.env.RANDOM_WALK_API_URL ??
+  process.env.NEXT_PUBLIC_RANDOM_WALK_API_URL ??
+  "https://api.randomwalknft.com:1443";
 const ZERO_ADDRESS =
   "0x0000000000000000000000000000000000000000" as `0x${string}`;
 const RANDOM_WALK_REFRESH_SECONDS = 60;
+const RANDOM_WALK_TIMEOUT_MS = 8_000;
 
-type RandomWalkMetadata = {
-  animation_url?: string;
-  attributes?: Array<{ trait_type?: string; value?: string | number }>;
-  image?: string;
-  name?: string;
-  properties?: { seed?: string };
-};
+const randomWalkMetadataSchema = z.object({
+  animation_url: z.string().optional(),
+  attributes: z
+    .array(
+      z.object({
+        trait_type: z.string().optional(),
+        value: z.union([z.string(), z.number()]).optional(),
+      }),
+    )
+    .optional(),
+  image: z.string().optional(),
+  name: z.string().optional(),
+  properties: z.object({ seed: z.string().optional() }).optional(),
+});
 
-type RandomWalkRawOffer = {
-  id: number;
-  offerId: number;
-  tokenId: number;
-  seller: string;
-  buyer: string;
-  price: number;
-  active: boolean;
-  createdAt: string;
-  createdAtTimestamp: number;
-  kind: OfferKind;
-};
+const randomWalkRawOfferSchema = z.object({
+  id: z.number(),
+  offerId: z.number(),
+  tokenId: z.number(),
+  seller: z.string(),
+  buyer: z.string(),
+  price: z.number(),
+  active: z.boolean(),
+  createdAt: z.string(),
+  createdAtTimestamp: z.number(),
+  kind: z.enum(["sell", "buy"]),
+});
 
-type RandomWalkRawHistory = {
-  recordType: number;
-  blockNumber: number;
-  timestamp: number;
-  dateTime: string;
-  owner?: string;
-  seller?: string;
-  buyer?: string;
-  price?: number;
-  offerId?: number | string;
-};
+const randomWalkRawHistorySchema = z.object({
+  recordType: z.number(),
+  blockNumber: z.number(),
+  timestamp: z.number(),
+  dateTime: z.string(),
+  owner: z.string().optional(),
+  seller: z.string().optional(),
+  buyer: z.string().optional(),
+  price: z.number().optional(),
+  offerId: z.union([z.number(), z.string()]).optional(),
+});
 
-type RandomWalkDetailPayload = {
-  nft: {
-    id: number;
-    name?: string;
-    owner: string;
-    seed: string;
-    rating?: number;
-    assets?: TokenMediaAssets;
-    tokenHistory?: RandomWalkRawHistory[];
-    mintedAt?: string;
-  };
-  buyOffers?: RandomWalkRawOffer[];
-  sellOffers?: RandomWalkRawOffer[];
-};
+const randomWalkDetailPayloadSchema = z.object({
+  nft: z.object({
+    id: z.number(),
+    name: z.string().optional(),
+    owner: z.string(),
+    seed: z.string(),
+    rating: z.number().optional(),
+    assets: z
+      .object({
+        blackImage: z.string().optional(),
+        blackThumb: z.string().optional(),
+        blackSingleVideo: z.string().optional(),
+        blackTripleVideo: z.string().optional(),
+        whiteImage: z.string().optional(),
+        whiteThumb: z.string().optional(),
+        whiteSingleVideo: z.string().optional(),
+        whiteTripleVideo: z.string().optional(),
+      })
+      .optional(),
+    tokenHistory: z.array(randomWalkRawHistorySchema).optional(),
+    mintedAt: z.string().optional(),
+  }),
+  buyOffers: z.array(randomWalkRawOfferSchema).optional(),
+  sellOffers: z.array(randomWalkRawOfferSchema).optional(),
+});
+
+type RandomWalkMetadata = z.infer<typeof randomWalkMetadataSchema>;
+
+type RandomWalkRawOffer = z.infer<typeof randomWalkRawOfferSchema>;
+
+type RandomWalkRawHistory = z.infer<typeof randomWalkRawHistorySchema>;
+
+async function fetchWithTimeout(
+  input: string,
+  init: RequestInit & { next?: { revalidate: number } },
+) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), RANDOM_WALK_TIMEOUT_MS);
+
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 function decodeFlightMarkup(html: string) {
   return html.replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/&amp;/g, "&");
@@ -265,7 +310,7 @@ export function parseRandomWalkDetailHtml(html: string): {
     throw new Error("Random Walk detail payload was not found.");
   }
 
-  const payload = JSON.parse(payloadText) as RandomWalkDetailPayload;
+  const payload = randomWalkDetailPayloadSchema.parse(JSON.parse(payloadText));
   const tokenId = payload.nft.id;
   const artwork = {
     image:
@@ -351,7 +396,7 @@ export async function fetchRandomWalkMarketplaceOffers(
     params.set("sort", sort);
   }
 
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `${RANDOM_WALK_SITE_URL}/marketplace${
       params.size ? `?${params.toString()}` : ""
     }`,
@@ -366,7 +411,7 @@ export async function fetchRandomWalkMarketplaceOffers(
 }
 
 export async function fetchRandomWalkTokenDetail(tokenId: number) {
-  const response = await fetch(`${RANDOM_WALK_SITE_URL}/detail/${tokenId}`, {
+  const response = await fetchWithTimeout(`${RANDOM_WALK_SITE_URL}/detail/${tokenId}`, {
     next: { revalidate: RANDOM_WALK_REFRESH_SECONDS },
   });
 
@@ -378,7 +423,7 @@ export async function fetchRandomWalkTokenDetail(tokenId: number) {
 }
 
 export async function fetchRandomWalkMetadata(tokenId: number) {
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `${RANDOM_WALK_API_URL}/api/randomwalk/metadata/${tokenId}`,
     { next: { revalidate: RANDOM_WALK_REFRESH_SECONDS } },
   );
@@ -389,6 +434,6 @@ export async function fetchRandomWalkMetadata(tokenId: number) {
 
   return tokenFromRandomWalkMetadata(
     tokenId,
-    (await response.json()) as RandomWalkMetadata,
+    randomWalkMetadataSchema.parse(await response.json()),
   );
 }

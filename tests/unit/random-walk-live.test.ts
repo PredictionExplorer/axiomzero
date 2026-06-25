@@ -185,7 +185,7 @@ describe("Random Walk live data adapter", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       "https://randomwalknft.com/marketplace?filter=buy&sort=price-desc",
-      { next: { revalidate: 60 } },
+      expect.objectContaining({ next: { revalidate: 60 } }),
     );
     expect(offers[0]).toMatchObject({
       id: "buy-319-3435-0.0010",

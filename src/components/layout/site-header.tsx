@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { ConnectWalletButton } from "@/components/wallet/connect-wallet-button";
 import { BRAND_NAME } from "@/lib/brand";
 import { ButtonLink } from "@/components/ui/button";
 
@@ -39,9 +40,16 @@ export function SiteHeader() {
           ))}
         </nav>
 
-        <ButtonLink href="/marketplace" variant="secondary" className="hidden sm:flex">
-          Browse market
-        </ButtonLink>
+        <div className="flex items-center gap-3">
+          <ButtonLink
+            href="/marketplace"
+            variant="secondary"
+            className="hidden xl:flex"
+          >
+            Browse market
+          </ButtonLink>
+          <ConnectWalletButton />
+        </div>
       </div>
     </header>
   );

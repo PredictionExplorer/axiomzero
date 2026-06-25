@@ -11,6 +11,9 @@ test("home page introduces Axiom Zero and links to the marketplace", async ({
   await expect(
     page.getByText(/Founders get no special privilege/i),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /connect wallet/i }),
+  ).toBeVisible();
   const marketplaceLink = page
     .locator('a[href="/marketplace"]')
     .filter({ hasText: /enter marketplace/i });
@@ -55,7 +58,7 @@ test("token detail page shows order book and wallet prompt", async ({
 
   await expect(page.getByRole("heading", { name: /#001233/i })).toBeVisible();
   await expect(page.getByText(/current listing/i).first()).toBeVisible();
-  await expect(page.getByText(/connect a wallet/i)).toBeVisible();
+  await expect(page.getByText(/connect a wallet/i).first()).toBeVisible();
   await expect(
     page.getByRole("heading", { name: /order book/i }),
   ).toBeVisible();
