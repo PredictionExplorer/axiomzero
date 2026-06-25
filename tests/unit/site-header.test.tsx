@@ -15,6 +15,16 @@ describe("SiteHeader", () => {
       "href",
       "/marketplace",
     );
+    expect(screen.getByRole("link", { name: /random walk/i })).toHaveAttribute(
+      "href",
+      "/marketplace?view=listings&collection=random-walk&sort=price-asc",
+    );
+    expect(
+      screen.getByRole("link", { name: /cosmic signature/i }),
+    ).toHaveAttribute(
+      "href",
+      "/marketplace?view=listings&collection=cosmic-signature&sort=price-asc",
+    );
     expect(
       screen.getByRole("button", { name: /connect wallet/i }),
     ).toBeInTheDocument();

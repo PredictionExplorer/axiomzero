@@ -93,8 +93,8 @@ export type MarketplaceSearchParams = {
 
 export type MarketplaceStats = {
   totalOffers: number;
-  lowestPrice?: number;
-  highestPrice?: number;
+  floorOffer?: MarketOffer;
+  topBidOffer?: MarketOffer;
   sellListings: number;
   buyOffers: number;
 };

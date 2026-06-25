@@ -160,19 +160,42 @@ describe("marketplace queries", () => {
     ]);
   });
 
-  it("calculates marketplace stats", () => {
-    expect(getMarketplaceStats(baseOffers)).toEqual({
-      totalOffers: 2,
-      lowestPrice: 1,
-      highestPrice: 2,
-      sellListings: 1,
-      buyOffers: 1,
+  it("calculates marketplace stats from sale listings and bids separately", () => {
+    const cheapBid = baseOffers[1];
+    const expensiveListing = baseOffers[0];
+    const floorListing = {
+      id: "floor",
+      collectionId: "random-walk",
+      tokenId: 3,
+      kind: "sell",
+      priceEth: 1.5,
+      maker: "0x0000000000000000000000000000000000000003",
+      createdAt: "2026-01-03T00:00:00.000Z",
+    } satisfies MarketOffer;
+    const topBid = {
+      id: "top-bid",
+      collectionId: "cosmic-signature",
+      tokenId: 4,
+      kind: "buy",
+      priceEth: 5,
+      maker: "0x0000000000000000000000000000000000000004",
+      createdAt: "2026-01-04T00:00:00.000Z",
+    } satisfies MarketOffer;
+
+    expect(
+      getMarketplaceStats([expensiveListing, cheapBid, floorListing, topBid]),
+    ).toEqual({
+      totalOffers: 4,
+      floorOffer: floorListing,
+      topBidOffer: topBid,
+      sellListings: 2,
+      buyOffers: 2,
     });
 
     expect(getMarketplaceStats([])).toEqual({
       totalOffers: 0,
-      lowestPrice: undefined,
-      highestPrice: undefined,
+      floorOffer: undefined,
+      topBidOffer: undefined,
       sellListings: 0,
       buyOffers: 0,
     });
@@ -253,7 +276,10 @@ describe("marketplace queries", () => {
     const detailHtml = String.raw`
       self.__next_f.push([1,"{\"nft\":{\"id\":9,\"owner\":\"0x0000000000000000000000000000000000000001\",\"seed\":\"seed\"},\"buyOffers\":[{\"id\":2,\"offerId\":2,\"tokenId\":9,\"seller\":\"0x0000000000000000000000000000000000000000\",\"buyer\":\"0x0000000000000000000000000000000000000002\",\"price\":0.2,\"active\":true,\"createdAt\":\"2026-01-02T00:00:00.000Z\",\"createdAtTimestamp\":1,\"kind\":\"buy\"}],\"sellOffers\":[]}"]);
     `;
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(detailHtml)));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(detailHtml)),
+    );
 
     const page = await getMarketplaceTokenPage({
       collection: "random-walk",
@@ -310,7 +336,9 @@ describe("marketplace queries", () => {
 
     expect(offers.map((offer) => offer.collectionId)).toEqual(["random-walk"]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(contractMocks.fetchCollectionContractOffers).toHaveBeenCalledTimes(1);
+    expect(contractMocks.fetchCollectionContractOffers).toHaveBeenCalledTimes(
+      1,
+    );
   });
 
   it("reads token markets, offers, and metadata fallback through query helpers", async () => {
@@ -357,10 +385,12 @@ describe("marketplace queries", () => {
     await expect(getOffersForToken("cosmic-signature", 10)).resolves.toEqual([
       baseOffers[1],
     ]);
-    await expect(getTokenMarket("cosmic-signature", 10)).resolves.toMatchObject({
-      token: { collectionId: "cosmic-signature", tokenId: 10 },
-      offers: [baseOffers[1]],
-    });
+    await expect(getTokenMarket("cosmic-signature", 10)).resolves.toMatchObject(
+      {
+        token: { collectionId: "cosmic-signature", tokenId: 10 },
+        offers: [baseOffers[1]],
+      },
+    );
     expect(contractMocks.fetchContractOffersForTokenId).toHaveBeenCalledWith(
       expect.objectContaining({
         collectionId: "cosmic-signature",

@@ -25,8 +25,16 @@ describe("marketplace API routes", () => {
       totalOffers: 1,
       sellListings: 0,
       buyOffers: 1,
-      lowestPrice: 0.5,
-      highestPrice: 0.5,
+      floorOffer: undefined,
+      topBidOffer: {
+        id: "buy-1",
+        collectionId: "random-walk",
+        tokenId: 1,
+        kind: "buy",
+        priceEth: 0.5,
+        maker: "0x0000000000000000000000000000000000000001",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
     });
   });
 
@@ -53,6 +61,10 @@ describe("marketplace API routes", () => {
       filter: "buy",
     });
     expect(payload.stats.totalOffers).toBe(1);
+    expect(payload.stats.topBidOffer).toMatchObject({
+      id: "buy-1",
+      priceEth: 0.5,
+    });
     expect(payload.offers[0]).toMatchObject({ id: "buy-1", kind: "buy" });
   });
 
@@ -78,9 +90,7 @@ describe("marketplace API routes", () => {
     });
 
     const response = await getTokenMarketRoute(
-      new NextRequest(
-        "http://localhost/api/marketplace/token/random-walk/9",
-      ),
+      new NextRequest("http://localhost/api/marketplace/token/random-walk/9"),
       {
         params: Promise.resolve({
           collectionId: "random-walk",
@@ -97,9 +107,7 @@ describe("marketplace API routes", () => {
 
   it("returns not found for unsupported token requests", async () => {
     const response = await getTokenMarketRoute(
-      new NextRequest(
-        "http://localhost/api/marketplace/token/not-real/9",
-      ),
+      new NextRequest("http://localhost/api/marketplace/token/not-real/9"),
       {
         params: Promise.resolve({
           collectionId: "not-real",

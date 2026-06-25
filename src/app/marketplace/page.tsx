@@ -65,13 +65,17 @@ export default async function MarketplacePage({
         : activeView === "discover"
           ? { ...search, kind: "all" as const }
           : { ...search, kind: "buy" as const, sort: "price-desc" as const };
-  const [visibleOffers, tokenPage] = await Promise.all([
+  const statsSearch = { ...search, kind: "all" as const };
+  const [visibleOffers, statsOffers, tokenPage] = await Promise.all([
     getMarketplaceOffers(offerSearch),
+    offerSearch.kind === "all"
+      ? Promise.resolve(undefined)
+      : getMarketplaceOffers(statsSearch),
     activeView === "discover"
       ? getMarketplaceTokenPage(search)
       : Promise.resolve(undefined),
   ]);
-  const stats = getMarketplaceStats(visibleOffers);
+  const stats = getMarketplaceStats(statsOffers ?? visibleOffers);
 
   return (
     <div className="mx-auto max-w-7xl px-5 py-14 sm:px-8">
@@ -95,8 +99,8 @@ export default async function MarketplacePage({
             Live collection markets
           </p>
           <p className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-ivory">
-            A calmer surface for thousands of tokens: search, page, and act
-            with wallet-aware controls instead of scrolling forever.
+            A calmer surface for thousands of tokens: search, page, and act with
+            wallet-aware controls instead of scrolling forever.
           </p>
         </div>
       </section>
@@ -200,8 +204,8 @@ export default async function MarketplacePage({
             Nothing matched this view
           </h2>
           <p className="mt-3 text-bone/78">
-            Try widening the price range, clearing the token filter, or switching
-            to another marketplace view.
+            Try widening the price range, clearing the token filter, or
+            switching to another marketplace view.
           </p>
         </div>
       ) : null}

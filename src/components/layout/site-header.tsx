@@ -6,8 +6,14 @@ import { BRAND_NAME } from "@/lib/brand";
 const navItems = [
   { href: "/marketplace", label: "Marketplace" },
   { href: "/marketplace?view=my-nfts", label: "My NFTs" },
-  { href: "/marketplace?collection=random-walk", label: "Random Walk" },
-  { href: "/marketplace?collection=cosmic-signature", label: "Cosmic Signature" },
+  {
+    href: "/marketplace?view=listings&collection=random-walk&sort=price-asc",
+    label: "Random Walk",
+  },
+  {
+    href: "/marketplace?view=listings&collection=cosmic-signature&sort=price-asc",
+    label: "Cosmic Signature",
+  },
 ];
 
 export function SiteHeader() {

@@ -23,7 +23,12 @@ import {
 
 const collectionIds = new Set(collections.map((collection) => collection.id));
 const offerKinds = new Set(["buy", "sell"]);
-const marketplaceViews = new Set(["discover", "listings", "top-bids", "my-nfts"]);
+const marketplaceViews = new Set([
+  "discover",
+  "listings",
+  "top-bids",
+  "my-nfts",
+]);
 const sortKeys = new Set(["price-asc", "price-desc", "recent"]);
 const DEFAULT_TOKEN_PAGE = 1;
 const DEFAULT_TOKEN_PAGE_SIZE = 12;
@@ -206,25 +211,22 @@ export async function getMarketplaceOffers(search: MarketplaceSearchParams) {
 export function getMarketplaceStats(
   allOffers: MarketOffer[],
 ): MarketplaceStats {
+  const sellOffers = allOffers.filter((offer) => offer.kind === "sell");
+  const buyOffers = allOffers.filter((offer) => offer.kind === "buy");
+
   return {
     totalOffers: allOffers.length,
-    lowestPrice: allOffers.length
-      ? Math.min(...allOffers.map((offer) => offer.priceEth))
-      : undefined,
-    highestPrice: allOffers.length
-      ? Math.max(...allOffers.map((offer) => offer.priceEth))
-      : undefined,
-    sellListings: allOffers.filter((offer) => offer.kind === "sell").length,
-    buyOffers: allOffers.filter((offer) => offer.kind === "buy").length,
+    floorOffer: sortOffers(sellOffers, "price-asc")[0],
+    topBidOffer: sortOffers(buyOffers, "price-desc")[0],
+    sellListings: sellOffers.length,
+    buyOffers: buyOffers.length,
   };
 }
 
-export function summarizeTokenMarket(
-  tokenMarket: {
-    token: TokenMarketSummary["token"];
-    offers: MarketOffer[];
-  },
-): TokenMarketSummary {
+export function summarizeTokenMarket(tokenMarket: {
+  token: TokenMarketSummary["token"];
+  offers: MarketOffer[];
+}): TokenMarketSummary {
   return {
     ...tokenMarket,
     activeSellOffer: sortOffers(
@@ -284,7 +286,9 @@ export async function getMarketplaceTokenPage(
     await Promise.all(
       pageCandidates.map(async ({ collectionId, tokenId }) => {
         try {
-          return summarizeTokenMarket(await getTokenMarket(collectionId, tokenId));
+          return summarizeTokenMarket(
+            await getTokenMarket(collectionId, tokenId),
+          );
         } catch {
           return undefined;
         }
