@@ -34,11 +34,7 @@ const MAX_DETAIL_LOAD = 48;
 
 type CollectionScanConfig = Pick<
   Collection,
-  | "id"
-  | "shortName"
-  | "nftAddress"
-  | "marketplaceAddress"
-  | "tokenRange"
+  "id" | "shortName" | "nftAddress" | "marketplaceAddress" | "tokenRange"
 >;
 
 type TokenMarketResponse = {
@@ -81,6 +77,15 @@ function isAddress(value: unknown): value is `0x${string}` {
   return typeof value === "string" && value.startsWith("0x");
 }
 
+function fallbackTokenIds(collection: CollectionScanConfig) {
+  return Array.from(
+    {
+      length: collection.tokenRange.end - collection.tokenRange.start + 1,
+    },
+    (_, index) => collection.tokenRange.start + index,
+  );
+}
+
 function summarizeTokenMarket(
   market: TokenMarketResponse,
   collection: CollectionScanConfig,
@@ -102,7 +107,9 @@ function summarizeTokenMarket(
 }
 
 async function loadTokenMarket(collectionId: string, tokenId: number) {
-  const response = await fetch(`/api/marketplace/token/${collectionId}/${tokenId}`);
+  const response = await fetch(
+    `/api/marketplace/token/${collectionId}/${tokenId}`,
+  );
 
   if (!response.ok) {
     throw new Error(`Token ${collectionId} ${tokenId} could not be loaded.`);
@@ -154,32 +161,80 @@ async function readEnumerableTokenIds({
   return tokenIds;
 }
 
+async function readIndexedTokenIds({
+  client,
+  collection,
+}: {
+  client: ContractReadClient;
+  collection: CollectionScanConfig;
+}) {
+  const totalSupply = (await client.readContract({
+    address: collection.nftAddress,
+    abi: erc721Abi,
+    functionName: "totalSupply",
+  })) as bigint;
+  const count = Number(totalSupply);
+
+  if (!Number.isSafeInteger(count) || count < 0) {
+    throw new Error(`${collection.shortName} totalSupply is invalid.`);
+  }
+
+  if (count === 0) {
+    return [];
+  }
+
+  const results = await client.multicall({
+    allowFailure: true,
+    contracts: Array.from({ length: count }, (_, index) => ({
+      address: collection.nftAddress,
+      abi: erc721Abi,
+      functionName: "tokenByIndex",
+      args: [BigInt(index)],
+    })),
+  });
+  const tokenIds = results.flatMap((result) =>
+    result.status === "success" && typeof result.result === "bigint"
+      ? [Number(result.result)]
+      : [],
+  );
+
+  if (!tokenIds.length) {
+    throw new Error(`${collection.shortName} token index is unavailable.`);
+  }
+
+  return [...new Set(tokenIds)].sort((left, right) => left - right);
+}
+
 async function scanOwnerOfRange({
   client,
   collection,
   owner,
+  tokenIds,
   onProgress,
 }: {
   client: ContractReadClient;
   collection: CollectionScanConfig;
   owner: `0x${string}`;
+  tokenIds?: number[];
   onProgress: (message: string) => void;
 }) {
-  const tokenIds = Array.from(
-    {
-      length: collection.tokenRange.end - collection.tokenRange.start + 1,
-    },
-    (_, index) => collection.tokenRange.start + index,
-  );
+  const candidateTokenIds = tokenIds ?? fallbackTokenIds(collection);
   const ownedTokenIds: number[] = [];
 
-  for (let offset = 0; offset < tokenIds.length; offset += OWNER_SCAN_CHUNK_SIZE) {
-    const chunk = tokenIds.slice(offset, offset + OWNER_SCAN_CHUNK_SIZE);
+  for (
+    let offset = 0;
+    offset < candidateTokenIds.length;
+    offset += OWNER_SCAN_CHUNK_SIZE
+  ) {
+    const chunk = candidateTokenIds.slice(
+      offset,
+      offset + OWNER_SCAN_CHUNK_SIZE,
+    );
     onProgress(
       `Scanning ${collection.shortName} ${offset + 1}-${Math.min(
         offset + OWNER_SCAN_CHUNK_SIZE,
-        tokenIds.length,
-      )} of ${tokenIds.length}`,
+        candidateTokenIds.length,
+      )} of ${candidateTokenIds.length}`,
     );
     const results = await client.multicall({
       allowFailure: true,
@@ -259,10 +314,22 @@ export function MyNftsPanel({
                 owner: address,
               });
             } catch {
+              let indexedTokenIds: number[] | undefined;
+
+              try {
+                indexedTokenIds = await readIndexedTokenIds({
+                  client: publicClient,
+                  collection,
+                });
+              } catch {
+                indexedTokenIds = undefined;
+              }
+
               ownedTokenIds = await scanOwnerOfRange({
                 client: publicClient,
                 collection,
                 owner: address,
+                tokenIds: indexedTokenIds,
                 onProgress: setStatus,
               });
             }
@@ -284,8 +351,8 @@ export function MyNftsPanel({
               }),
             );
 
-            return markets.filter(
-              (item): item is OwnerScanItem => Boolean(item),
+            return markets.filter((item): item is OwnerScanItem =>
+              Boolean(item),
             );
           }),
         )
@@ -311,7 +378,7 @@ export function MyNftsPanel({
           ? `Found ${collected.length} owned NFT${
               collected.length === 1 ? "" : "s"
             }.`
-          : "No owned NFTs were found in the configured collection ranges.",
+          : "No owned NFTs were found in the live collection supply.",
       );
     } catch (scanError) {
       setError(
@@ -546,7 +613,9 @@ export function MyNftsPanel({
                   <div className="rounded-2xl bg-ivory/[0.045] p-3">
                     <p className="text-bone/75">Highest bid</p>
                     <p className="mt-1 font-semibold text-chartreuse">
-                      {item.highestBid ? formatEth(item.highestBid.priceEth) : "None"}
+                      {item.highestBid
+                        ? formatEth(item.highestBid.priceEth)
+                        : "None"}
                     </p>
                   </div>
                 </div>
@@ -597,7 +666,9 @@ export function MyNftsPanel({
 
       {isConnected && !isScanning && !ownedItems.length ? (
         <div className="mt-6 rounded-[2rem] border border-ivory/10 bg-ink/38 p-8 text-center">
-          <h3 className="text-2xl font-semibold text-ivory">No owned NFTs found</h3>
+          <h3 className="text-2xl font-semibold text-ivory">
+            No owned NFTs found
+          </h3>
           <p className="mt-3 text-bone/75">
             Try refreshing after switching wallets, or open a token directly if
             it sits outside the configured scan range.

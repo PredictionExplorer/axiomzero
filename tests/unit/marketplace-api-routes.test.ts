@@ -5,6 +5,7 @@ const queryMocks = vi.hoisted(() => ({
   getMarketplaceOffers: vi.fn(),
   getMarketplaceStats: vi.fn(),
   getTokenMarket: vi.fn(),
+  isTokenNotFoundError: vi.fn(),
   parseMarketplaceSearchParams: vi.fn(),
 }));
 
@@ -16,6 +17,10 @@ import { GET as getTokenMarketRoute } from "@/app/api/marketplace/token/[collect
 describe("marketplace API routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    queryMocks.isTokenNotFoundError.mockImplementation(
+      (error: unknown) =>
+        error instanceof Error && error.name === "TokenNotFoundError",
+    );
     queryMocks.parseMarketplaceSearchParams.mockReturnValue({
       collection: "all",
       kind: "buy",
@@ -117,5 +122,28 @@ describe("marketplace API routes", () => {
     );
 
     expect(response.status).toBe(404);
+  });
+
+  it("returns not found when a known collection token is unminted", async () => {
+    const error = new Error("missing token");
+    error.name = "TokenNotFoundError";
+    queryMocks.getTokenMarket.mockRejectedValueOnce(error);
+
+    const response = await getTokenMarketRoute(
+      new NextRequest(
+        "http://localhost/api/marketplace/token/random-walk/4086",
+      ),
+      {
+        params: Promise.resolve({
+          collectionId: "random-walk",
+          tokenId: "4086",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "Token market was not found.",
+    });
   });
 });

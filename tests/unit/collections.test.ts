@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { collections, getCollection, requireCollection } from "@/config/collections";
+import {
+  collections,
+  getCollection,
+  requireCollection,
+} from "@/config/collections";
 
 describe("collections config", () => {
   it("defines Random Walk and Cosmic Signature equally", () => {
@@ -17,14 +21,14 @@ describe("collections config", () => {
     );
   });
 
-  it("defines bounded token ranges for discovery and wallet scans", () => {
+  it("defines fallback token ranges for discovery and wallet scans", () => {
     expect(requireCollection("random-walk").tokenRange).toEqual({
       start: 0,
-      end: 4095,
+      end: 4085,
     });
     expect(requireCollection("cosmic-signature").tokenRange).toEqual({
-      start: 1,
-      end: 256,
+      start: 0,
+      end: 23,
     });
   });
 

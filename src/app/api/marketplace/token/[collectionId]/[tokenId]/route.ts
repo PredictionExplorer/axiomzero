@@ -1,7 +1,10 @@
 import { NextRequest } from "next/server";
 
 import { getCollection } from "@/config/collections";
-import { getTokenMarket } from "@/lib/marketplace/queries";
+import {
+  getTokenMarket,
+  isTokenNotFoundError,
+} from "@/lib/marketplace/queries";
 import type { CollectionId } from "@/lib/marketplace/types";
 
 export const revalidate = 60;
@@ -36,6 +39,13 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       ...market,
     });
   } catch (error) {
+    if (isTokenNotFoundError(error)) {
+      return Response.json(
+        { error: "Token market was not found." },
+        { status: 404 },
+      );
+    }
+
     return Response.json(
       {
         error:

@@ -16,6 +16,7 @@ import {
   fetchRandomWalkTokenDetail,
 } from "@/lib/marketplace/random-walk-live";
 import { fetchCosmicSignatureMetadata } from "@/lib/marketplace/cosmic-signature-live";
+import { getCollectionTokenIds } from "@/lib/marketplace/collection-index-live";
 import {
   fetchCollectionContractOffers,
   fetchContractOffersForTokenId,
@@ -23,15 +24,24 @@ import {
 
 const collectionIds = new Set(collections.map((collection) => collection.id));
 const offerKinds = new Set(["buy", "sell"]);
-const marketplaceViews = new Set([
-  "discover",
-  "listings",
-  "top-bids",
-]);
+const marketplaceViews = new Set(["discover", "listings", "top-bids"]);
 const sortKeys = new Set(["price-asc", "price-desc", "recent"]);
 const DEFAULT_TOKEN_PAGE = 1;
 const DEFAULT_TOKEN_PAGE_SIZE = 12;
 const MAX_TOKEN_PAGE_SIZE = 24;
+
+export class TokenNotFoundError extends Error {
+  constructor(collectionId: CollectionId, tokenId: number) {
+    super(`${collectionId} token ${tokenId} was not found.`);
+    this.name = "TokenNotFoundError";
+  }
+}
+
+export function isTokenNotFoundError(
+  error: unknown,
+): error is TokenNotFoundError {
+  return error instanceof TokenNotFoundError;
+}
 
 function firstValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -239,7 +249,23 @@ export function summarizeTokenMarket(tokenMarket: {
   };
 }
 
-function tokenCandidates(search: MarketplaceSearchParams) {
+async function mintedTokenIdsForCollection(collectionId: CollectionId) {
+  return getCollectionTokenIds(collectionId);
+}
+
+async function assertMintedToken(collectionId: CollectionId, tokenId: number) {
+  if (!Number.isInteger(tokenId)) {
+    throw new TokenNotFoundError(collectionId, tokenId);
+  }
+
+  const tokenIds = await mintedTokenIdsForCollection(collectionId);
+
+  if (!tokenIds.includes(tokenId)) {
+    throw new TokenNotFoundError(collectionId, tokenId);
+  }
+}
+
+async function tokenCandidates(search: MarketplaceSearchParams) {
   const requestedCollections =
     search.collection && search.collection !== "all"
       ? collections.filter((collection) => collection.id === search.collection)
@@ -252,30 +278,31 @@ function tokenCandidates(search: MarketplaceSearchParams) {
     return [];
   }
 
-  return requestedCollections.flatMap((collection) => {
+  const collectionTokenIds = await Promise.all(
+    requestedCollections.map(async (collection) => ({
+      collectionId: collection.id,
+      tokenIds: await mintedTokenIdsForCollection(collection.id),
+    })),
+  );
+
+  return collectionTokenIds.flatMap(({ collectionId, tokenIds }) => {
     if (tokenQuery !== undefined) {
-      return tokenQuery >= collection.tokenRange.start &&
-        tokenQuery <= collection.tokenRange.end
-        ? [{ collectionId: collection.id, tokenId: tokenQuery }]
+      return tokenIds.includes(tokenQuery)
+        ? [{ collectionId, tokenId: tokenQuery }]
         : [];
     }
 
-    return Array.from(
-      {
-        length: collection.tokenRange.end - collection.tokenRange.start + 1,
-      },
-      (_, index) => ({
-        collectionId: collection.id,
-        tokenId: collection.tokenRange.start + index,
-      }),
-    );
+    return tokenIds.map((tokenId) => ({
+      collectionId,
+      tokenId,
+    }));
   });
 }
 
 export async function getMarketplaceTokenPage(
   search: MarketplaceSearchParams,
 ): Promise<MarketplaceTokenPage> {
-  const candidates = tokenCandidates(search);
+  const candidates = await tokenCandidates(search);
   const pageSize = search.pageSize ?? DEFAULT_TOKEN_PAGE_SIZE;
   const totalPages = Math.max(1, Math.ceil(candidates.length / pageSize));
   const page = Math.min(search.page ?? DEFAULT_TOKEN_PAGE, totalPages);
@@ -316,12 +343,29 @@ export async function getToken(collectionId: CollectionId, tokenId: number) {
   return fetchCosmicSignatureMetadata(tokenId);
 }
 
+async function fetchRandomWalkOffersForToken(tokenId: number) {
+  const offerResults = await Promise.allSettled([
+    fetchRandomWalkMarketplaceOffers("sell", "price-asc"),
+    fetchRandomWalkMarketplaceOffers("buy", "price-desc"),
+  ]);
+
+  return offerResults
+    .flatMap((result) => (result.status === "fulfilled" ? result.value : []))
+    .filter((offer) => offer.tokenId === tokenId);
+}
+
 export async function getOffersForToken(
   collectionId: CollectionId,
   tokenId: number,
 ) {
+  await assertMintedToken(collectionId, tokenId);
+
   if (collectionId === "random-walk") {
-    return (await fetchRandomWalkTokenDetail(tokenId)).offers;
+    try {
+      return (await fetchRandomWalkTokenDetail(tokenId)).offers;
+    } catch {
+      return fetchRandomWalkOffersForToken(tokenId);
+    }
   }
 
   const collection = requireCollection(collectionId);
@@ -340,8 +384,23 @@ export async function getTokenMarket(
   collectionId: CollectionId,
   tokenId: number,
 ) {
+  await assertMintedToken(collectionId, tokenId);
+
   if (collectionId === "random-walk") {
-    return fetchRandomWalkTokenDetail(tokenId);
+    try {
+      return await fetchRandomWalkTokenDetail(tokenId);
+    } catch {
+      const token = await fetchRandomWalkMetadata(tokenId);
+      const offers = await fetchRandomWalkOffersForToken(tokenId);
+
+      return {
+        token,
+        offers: offers.map((offer) => ({
+          ...offer,
+          artwork: offer.artwork ?? token.artwork,
+        })),
+      };
+    }
   }
 
   const collection = requireCollection(collectionId);

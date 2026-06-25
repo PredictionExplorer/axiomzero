@@ -15,6 +15,10 @@ const RANDOM_WALK_API_URL =
   process.env.RANDOM_WALK_API_URL ??
   process.env.NEXT_PUBLIC_RANDOM_WALK_API_URL ??
   "https://api.randomwalknft.com:1443";
+const RANDOM_WALK_METADATA_URL =
+  process.env.RANDOM_WALK_METADATA_URL ??
+  process.env.NEXT_PUBLIC_RANDOM_WALK_METADATA_URL ??
+  "https://randomwalknft-api.com";
 const ZERO_ADDRESS =
   "0x0000000000000000000000000000000000000000" as `0x${string}`;
 const RANDOM_WALK_REFRESH_SECONDS = 60;
@@ -411,9 +415,12 @@ export async function fetchRandomWalkMarketplaceOffers(
 }
 
 export async function fetchRandomWalkTokenDetail(tokenId: number) {
-  const response = await fetchWithTimeout(`${RANDOM_WALK_SITE_URL}/detail/${tokenId}`, {
-    next: { revalidate: RANDOM_WALK_REFRESH_SECONDS },
-  });
+  const response = await fetchWithTimeout(
+    `${RANDOM_WALK_SITE_URL}/detail/${tokenId}`,
+    {
+      next: { revalidate: RANDOM_WALK_REFRESH_SECONDS },
+    },
+  );
 
   if (!response.ok) {
     throw new Error(`Random Walk token detail returned ${response.status}.`);
@@ -423,17 +430,33 @@ export async function fetchRandomWalkTokenDetail(tokenId: number) {
 }
 
 export async function fetchRandomWalkMetadata(tokenId: number) {
-  const response = await fetchWithTimeout(
+  const metadataUrls = [
+    `${RANDOM_WALK_METADATA_URL}/metadata/${tokenId}`,
     `${RANDOM_WALK_API_URL}/api/randomwalk/metadata/${tokenId}`,
-    { next: { revalidate: RANDOM_WALK_REFRESH_SECONDS } },
-  );
+  ];
+  let lastError: Error | undefined;
 
-  if (!response.ok) {
-    throw new Error(`Random Walk metadata returned ${response.status}.`);
+  for (const url of [...new Set(metadataUrls)]) {
+    try {
+      const response = await fetchWithTimeout(url, {
+        next: { revalidate: RANDOM_WALK_REFRESH_SECONDS },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Random Walk metadata returned ${response.status}.`);
+      }
+
+      return tokenFromRandomWalkMetadata(
+        tokenId,
+        randomWalkMetadataSchema.parse(await response.json()),
+      );
+    } catch (error) {
+      lastError =
+        error instanceof Error
+          ? error
+          : new Error("Random Walk metadata could not be loaded.");
+    }
   }
 
-  return tokenFromRandomWalkMetadata(
-    tokenId,
-    randomWalkMetadataSchema.parse(await response.json()),
-  );
+  throw lastError ?? new Error("Random Walk metadata could not be loaded.");
 }

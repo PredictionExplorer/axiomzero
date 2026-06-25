@@ -4,8 +4,12 @@ const contractMocks = vi.hoisted(() => ({
   fetchCollectionContractOffers: vi.fn(),
   fetchContractOffersForTokenId: vi.fn(),
 }));
+const indexMocks = vi.hoisted(() => ({
+  getCollectionTokenIds: vi.fn(),
+}));
 
 vi.mock("@/lib/marketplace/marketplace-contract-live", () => contractMocks);
+vi.mock("@/lib/marketplace/collection-index-live", () => indexMocks);
 
 import {
   filterOffers,
@@ -44,13 +48,19 @@ const baseOffers = [
 
 describe("marketplace queries", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+    indexMocks.getCollectionTokenIds.mockImplementation(
+      async (collectionId: string) =>
+        collectionId === "random-walk"
+          ? [0, 1, 2, 7, 8, 9, 10, 3456, 4085]
+          : [0, 1, 2, 10, 23],
+    );
     contractMocks.fetchCollectionContractOffers.mockResolvedValue([]);
     contractMocks.fetchContractOffersForTokenId.mockResolvedValue([]);
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    vi.clearAllMocks();
   });
 
   it("parses supported query state and normalizes invalid values", () => {
@@ -298,6 +308,66 @@ describe("marketplace queries", () => {
     });
     expect(page.items[0]?.token.tokenId).toBe(9);
     expect(page.items[0]?.highestBid?.priceEth).toBe(0.2);
+  });
+
+  it("builds discovery pages from the live minted token index", async () => {
+    indexMocks.getCollectionTokenIds.mockResolvedValue([5, 7]);
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const tokenId = Number(String(input).split("/").pop());
+      const detailHtml = String.raw`
+        self.__next_f.push([1,"{\"nft\":{\"id\":${tokenId},\"owner\":\"0x0000000000000000000000000000000000000001\",\"seed\":\"seed-${tokenId}\"},\"buyOffers\":[],\"sellOffers\":[]}"]);
+      `;
+
+      return new Response(detailHtml);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const page = await getMarketplaceTokenPage({
+      collection: "random-walk",
+      view: "discover",
+      page: 1,
+      pageSize: 12,
+    });
+
+    expect(page).toMatchObject({
+      totalItems: 2,
+      totalPages: 1,
+    });
+    expect(page.items.map((item) => item.token.tokenId)).toEqual([5, 7]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("falls back to Random Walk metadata and marketplace orders when detail loading fails", async () => {
+    indexMocks.getCollectionTokenIds.mockResolvedValueOnce([3456]);
+    const buyHtml = String.raw`["$","div","buy-175",{"children":[["$","$L1f",null,{"id":3456,"image":"buy.jpg","href":"/detail/3456"}],["$","span",null,{"children":["#003456"," · ","0.8000 ETH"]}]]}]`;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("", { status: 503 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            name: "Random Walk #003456",
+            properties: { seed: "metadata-seed" },
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(new Response(""))
+      .mockResolvedValueOnce(new Response(buyHtml));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getTokenMarket("random-walk", 3456)).resolves.toMatchObject({
+      token: {
+        tokenId: 3456,
+        seed: "metadata-seed",
+      },
+      offers: [
+        expect.objectContaining({
+          kind: "buy",
+          tokenId: 3456,
+          priceEth: 0.8,
+        }),
+      ],
+    });
   });
 
   it("fetches marketplace offers from the requested Cosmic Signature source", async () => {

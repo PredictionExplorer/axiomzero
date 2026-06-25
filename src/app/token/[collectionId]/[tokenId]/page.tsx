@@ -2,19 +2,25 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
-import { requireCollection } from "@/config/collections";
+import { getCollection } from "@/config/collections";
 import { TokenActions } from "@/components/marketplace/token-actions";
 import type { CollectionId, MarketToken } from "@/lib/marketplace/types";
-import { getToken, getTokenMarket } from "@/lib/marketplace/queries";
+import {
+  getToken,
+  getTokenMarket,
+  isTokenNotFoundError,
+} from "@/lib/marketplace/queries";
+import { getCollectionTokenIds } from "@/lib/marketplace/collection-index-live";
+import { tokenPath } from "@/lib/marketplace/routes";
 import {
   formatDate,
   formatEth,
   formatTokenId,
   shortenAddress,
 } from "@/lib/utils";
-import { ButtonLink } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 
-type Params = Promise<{ collectionId: CollectionId; tokenId: string }>;
+type Params = Promise<{ collectionId: string; tokenId: string }>;
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 function firstValue(value: string | string[] | undefined) {
@@ -103,9 +109,11 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { collectionId, tokenId } = await params;
   const parsedTokenId = Number(tokenId);
-  const token = Number.isFinite(parsedTokenId)
-    ? await getToken(collectionId, parsedTokenId)
-    : undefined;
+  const collection = getCollection(collectionId as CollectionId);
+  const token =
+    collection && Number.isFinite(parsedTokenId)
+      ? await getToken(collection.id, parsedTokenId).catch(() => undefined)
+      : undefined;
 
   return {
     title: token?.name ?? "Token",
@@ -130,16 +138,25 @@ export default async function TokenPage({
     notFound();
   }
 
-  const collection = requireCollection(collectionId);
-  const market = await getTokenMarket(collectionId, parsedTokenId).catch(
-    () => undefined,
-  );
-  const token = market?.token;
+  const collection = getCollection(collectionId as CollectionId);
 
-  if (!token) {
+  if (!collection) {
     notFound();
   }
 
+  let market;
+
+  try {
+    market = await getTokenMarket(collection.id, parsedTokenId);
+  } catch (error) {
+    if (isTokenNotFoundError(error)) {
+      notFound();
+    }
+
+    throw error;
+  }
+
+  const token = market.token;
   const tokenOffers = market.offers;
   const activeSellOffer = tokenOffers
     .filter((offer) => offer.kind === "sell")
@@ -154,6 +171,13 @@ export default async function TokenPage({
     mediaParam === "single" || mediaParam === "triple" ? mediaParam : "image";
   const selectedMedia = resolveMedia(token, theme, media);
   const snapshotTrait = collectorSnapshotTrait(token);
+  const tokenIds = await getCollectionTokenIds(collection.id);
+  const tokenIndex = tokenIds.indexOf(token.tokenId);
+  const previousTokenId = tokenIndex > 0 ? tokenIds[tokenIndex - 1] : undefined;
+  const nextTokenId =
+    tokenIndex >= 0 && tokenIndex < tokenIds.length - 1
+      ? tokenIds[tokenIndex + 1]
+      : undefined;
 
   return (
     <div className="mx-auto grid max-w-7xl gap-8 px-5 py-14 sm:px-8 lg:grid-cols-[0.95fr_1.05fr]">
@@ -185,7 +209,7 @@ export default async function TokenPage({
             {(["black", "white"] as const).map((option) => (
               <ButtonLink
                 key={option}
-                href={mediaHref(collectionId, token.tokenId, option, media)}
+                href={mediaHref(collection.id, token.tokenId, option, media)}
                 variant={theme === option ? "primary" : "secondary"}
                 className="h-9 px-4"
               >
@@ -195,7 +219,7 @@ export default async function TokenPage({
             {(["image", "single", "triple"] as const).map((option) => (
               <ButtonLink
                 key={option}
-                href={mediaHref(collectionId, token.tokenId, theme, option)}
+                href={mediaHref(collection.id, token.tokenId, theme, option)}
                 variant={media === option ? "primary" : "secondary"}
                 className="h-9 px-4"
               >
@@ -208,18 +232,30 @@ export default async function TokenPage({
             ))}
           </div>
           <div className="mt-4 flex justify-between gap-3">
-            <ButtonLink
-              href={`/token/${collectionId}/${Math.max(0, token.tokenId - 1)}`}
-              variant="secondary"
-            >
-              Prev token
-            </ButtonLink>
-            <ButtonLink
-              href={`/token/${collectionId}/${token.tokenId + 1}`}
-              variant="secondary"
-            >
-              Next token
-            </ButtonLink>
+            {previousTokenId === undefined ? (
+              <Button type="button" variant="secondary" disabled>
+                Prev token
+              </Button>
+            ) : (
+              <ButtonLink
+                href={tokenPath(collection.id, previousTokenId)}
+                variant="secondary"
+              >
+                Prev token
+              </ButtonLink>
+            )}
+            {nextTokenId === undefined ? (
+              <Button type="button" variant="secondary" disabled>
+                Next token
+              </Button>
+            ) : (
+              <ButtonLink
+                href={tokenPath(collection.id, nextTokenId)}
+                variant="secondary"
+              >
+                Next token
+              </ButtonLink>
+            )}
           </div>
         </div>
 
@@ -314,7 +350,7 @@ export default async function TokenPage({
             </h2>
             <div className="mt-5 flex flex-wrap gap-3">
               <ButtonLink
-                href={`/token/${collectionId}/${token.tokenId}`}
+                href={tokenPath(collection.id, token.tokenId)}
                 variant="secondary"
               >
                 Copy detail link

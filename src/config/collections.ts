@@ -21,10 +21,13 @@ const COSMIC_SIGNATURE_MARKETPLACE_ADDRESS =
     | undefined) ?? "0x47eF85Dfb775aCE0934fBa9EEd09D22e6eC0Cc08";
 
 const RANDOM_WALK_MAX_TOKEN_ID = Number(
-  process.env.NEXT_PUBLIC_RANDOM_WALK_MAX_TOKEN_ID ?? 4095,
+  process.env.NEXT_PUBLIC_RANDOM_WALK_MAX_TOKEN_ID ?? 4085,
+);
+const COSMIC_SIGNATURE_MIN_TOKEN_ID = Number(
+  process.env.NEXT_PUBLIC_COSMIC_SIGNATURE_MIN_TOKEN_ID ?? 0,
 );
 const COSMIC_SIGNATURE_MAX_TOKEN_ID = Number(
-  process.env.NEXT_PUBLIC_COSMIC_SIGNATURE_MAX_TOKEN_ID ?? 256,
+  process.env.NEXT_PUBLIC_COSMIC_SIGNATURE_MAX_TOKEN_ID ?? 23,
 );
 
 export const collections = [
@@ -60,10 +63,12 @@ export const collections = [
     accent: "chartreuse",
     supplyLabel: "Cycle signatures",
     tokenRange: {
-      start: 1,
+      start: Number.isFinite(COSMIC_SIGNATURE_MIN_TOKEN_ID)
+        ? COSMIC_SIGNATURE_MIN_TOKEN_ID
+        : 0,
       end: Number.isFinite(COSMIC_SIGNATURE_MAX_TOKEN_ID)
         ? COSMIC_SIGNATURE_MAX_TOKEN_ID
-        : 256,
+        : 23,
     },
   },
 ] satisfies Collection[];
