@@ -1,106 +1,33 @@
-import Image from "next/image";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
 import { getCollection } from "@/config/collections";
-import { TokenActions } from "@/components/marketplace/token-actions";
-import type { CollectionId, MarketToken } from "@/lib/marketplace/types";
+import { TokenDetailTabs } from "@/components/marketplace/token-detail-tabs";
+import {
+  TokenCollectorNotesPanel,
+  TokenHistoryPanel,
+  TokenMarketPanel,
+} from "@/components/marketplace/token-detail-panels";
+import { TokenMediaViewer } from "@/components/marketplace/token-media-viewer";
+import type { CollectionId } from "@/lib/marketplace/types";
 import {
   getToken,
   getTokenMarket,
   isTokenNotFoundError,
 } from "@/lib/marketplace/queries";
 import { getCollectionTokenIds } from "@/lib/marketplace/collection-index-live";
-import { tokenPath } from "@/lib/marketplace/routes";
 import {
-  formatDate,
-  formatEth,
-  formatTokenId,
-  shortenAddress,
-} from "@/lib/utils";
-import { Button, ButtonLink } from "@/components/ui/button";
+  buildTokenMediaModel,
+  formatFullDate,
+  parseTokenDetailState,
+  primaryTokenTrait,
+  sortOffersForDisplay,
+  tokenDetailHref,
+} from "@/lib/marketplace/token-detail";
+import { formatEth, formatTokenId, shortenAddress } from "@/lib/utils";
 
 type Params = Promise<{ collectionId: string; tokenId: string }>;
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
-
-function firstValue(value: string | string[] | undefined) {
-  return Array.isArray(value) ? value[0] : value;
-}
-
-function mediaHref(
-  collectionId: CollectionId,
-  tokenId: number,
-  theme: "black" | "white",
-  media: "image" | "single" | "triple",
-) {
-  return `/token/${collectionId}/${tokenId}?theme=${theme}&media=${media}`;
-}
-
-function resolveMedia(
-  token: MarketToken,
-  theme: "black" | "white",
-  media: "image" | "single" | "triple",
-) {
-  const assets = token.assets;
-
-  if (theme === "white") {
-    if (media === "single" && assets?.whiteSingleVideo) {
-      return { type: "video" as const, src: assets.whiteSingleVideo };
-    }
-    if (media === "triple" && assets?.whiteTripleVideo) {
-      return { type: "video" as const, src: assets.whiteTripleVideo };
-    }
-
-    return {
-      type: "image" as const,
-      src: assets?.whiteImage ?? token.artwork.image,
-    };
-  }
-
-  if (media === "single" && assets?.blackSingleVideo) {
-    return { type: "video" as const, src: assets.blackSingleVideo };
-  }
-  if (media === "triple" && assets?.blackTripleVideo) {
-    return { type: "video" as const, src: assets.blackTripleVideo };
-  }
-
-  return {
-    type: "image" as const,
-    src: assets?.blackImage ?? token.artwork.image,
-  };
-}
-
-function formatFullDate(value: string | undefined) {
-  if (!value) {
-    return "Unknown";
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function collectorSnapshotTrait(token: MarketToken) {
-  if (token.rating !== undefined) {
-    return {
-      label: "Beauty score",
-      value: token.rating.toFixed(2),
-    };
-  }
-
-  const primaryTrait = token.traits.find(
-    (trait) => trait.label.toLowerCase() !== "seed",
-  );
-
-  return {
-    label: primaryTrait?.label ?? "Primary trait",
-    value: primaryTrait?.value ?? "Not available",
-  };
-}
 
 export async function generateMetadata({
   params,
@@ -158,19 +85,11 @@ export default async function TokenPage({
 
   const token = market.token;
   const tokenOffers = market.offers;
-  const activeSellOffer = tokenOffers
-    .filter((offer) => offer.kind === "sell")
-    .sort((left, right) => left.priceEth - right.priceEth)[0];
-  const highestBid = tokenOffers
-    .filter((offer) => offer.kind === "buy")
-    .sort((left, right) => right.priceEth - left.priceEth)[0];
-  const theme =
-    firstValue(resolvedSearchParams.theme) === "white" ? "white" : "black";
-  const mediaParam = firstValue(resolvedSearchParams.media);
-  const media =
-    mediaParam === "single" || mediaParam === "triple" ? mediaParam : "image";
-  const selectedMedia = resolveMedia(token, theme, media);
-  const snapshotTrait = collectorSnapshotTrait(token);
+  const activeSellOffer = sortOffersForDisplay(tokenOffers, "sell")[0];
+  const highestBid = sortOffersForDisplay(tokenOffers, "buy")[0];
+  const requestedState = parseTokenDetailState(resolvedSearchParams);
+  const mediaModel = buildTokenMediaModel(collection.id, token, requestedState);
+  const snapshotTrait = primaryTokenTrait(token);
   const tokenIds = await getCollectionTokenIds(collection.id);
   const tokenIndex = tokenIds.indexOf(token.tokenId);
   const previousTokenId = tokenIndex > 0 ? tokenIds[tokenIndex - 1] : undefined;
@@ -178,285 +97,137 @@ export default async function TokenPage({
     tokenIndex >= 0 && tokenIndex < tokenIds.length - 1
       ? tokenIds[tokenIndex + 1]
       : undefined;
+  const previousHref =
+    previousTokenId === undefined
+      ? undefined
+      : tokenDetailHref(collection.id, previousTokenId, mediaModel.state);
+  const nextHref =
+    nextTokenId === undefined
+      ? undefined
+      : tokenDetailHref(collection.id, nextTokenId, mediaModel.state);
+  const detailHref = tokenDetailHref(
+    collection.id,
+    token.tokenId,
+    mediaModel.state,
+  );
+  const stillImageHref =
+    mediaModel.selectedMedia.type === "image"
+      ? mediaModel.selectedMedia.src
+      : (token.assets?.blackImage ?? token.artwork.image);
+  const videoHref =
+    mediaModel.selectedMedia.type === "video"
+      ? mediaModel.selectedMedia.src
+      : undefined;
+  const tabs = [
+    {
+      id: "market" as const,
+      label: "Market",
+      href: tokenDetailHref(collection.id, token.tokenId, mediaModel.state, {
+        tab: "market",
+      }),
+    },
+    {
+      id: "history" as const,
+      label: "History",
+      href: tokenDetailHref(collection.id, token.tokenId, mediaModel.state, {
+        tab: "history",
+      }),
+    },
+    {
+      id: "notes" as const,
+      label: "Collector notes",
+      href: tokenDetailHref(collection.id, token.tokenId, mediaModel.state, {
+        tab: "notes",
+      }),
+    },
+  ];
 
   return (
-    <div className="mx-auto grid max-w-7xl gap-8 px-5 py-14 sm:px-8 lg:grid-cols-[0.95fr_1.05fr]">
-      <section className="space-y-5">
-        <div className="overflow-hidden rounded-[2.5rem] border border-ivory/10 bg-carbon p-4 shadow-[0_40px_140px_rgba(0,0,0,0.32)]">
-          <div className="relative aspect-square overflow-hidden rounded-[2rem]">
-            {selectedMedia.type === "image" ? (
-              <Image
-                src={selectedMedia.src}
-                alt={token.artwork.alt}
-                fill
-                priority
-                sizes="(min-width: 1024px) 45vw, 100vw"
-                className="object-contain p-4"
-              />
-            ) : (
-              <video
-                src={selectedMedia.src}
-                className="h-full w-full object-contain p-4"
-                autoPlay
-                muted
-                loop
-                playsInline
-                controls
-              />
-            )}
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {(["black", "white"] as const).map((option) => (
-              <ButtonLink
-                key={option}
-                href={mediaHref(collection.id, token.tokenId, option, media)}
-                variant={theme === option ? "primary" : "secondary"}
-                className="h-9 px-4"
-              >
-                {option === "black" ? "Dark" : "Light"}
-              </ButtonLink>
-            ))}
-            {(["image", "single", "triple"] as const).map((option) => (
-              <ButtonLink
-                key={option}
-                href={mediaHref(collection.id, token.tokenId, theme, option)}
-                variant={media === option ? "primary" : "secondary"}
-                className="h-9 px-4"
-              >
-                {option === "image"
-                  ? "Image"
-                  : option === "single"
-                    ? "Single video"
-                    : "Triple video"}
-              </ButtonLink>
-            ))}
-          </div>
-          <div className="mt-4 flex justify-between gap-3">
-            {previousTokenId === undefined ? (
-              <Button type="button" variant="secondary" disabled>
-                Prev token
-              </Button>
-            ) : (
-              <ButtonLink
-                href={tokenPath(collection.id, previousTokenId)}
-                variant="secondary"
-              >
-                Prev token
-              </ButtonLink>
-            )}
-            {nextTokenId === undefined ? (
-              <Button type="button" variant="secondary" disabled>
-                Next token
-              </Button>
-            ) : (
-              <ButtonLink
-                href={tokenPath(collection.id, nextTokenId)}
-                variant="secondary"
-              >
-                Next token
-              </ButtonLink>
-            )}
-          </div>
-        </div>
-
-        <TokenActions
-          collection={collection}
-          tokenId={token.tokenId}
-          activeSellOffer={activeSellOffer}
-          offers={tokenOffers}
+    <div className="mx-auto max-w-7xl px-5 py-14 sm:px-8">
+      <div className="grid gap-8 lg:grid-cols-[0.92fr_1.08fr]">
+        <TokenMediaViewer
+          token={token}
+          selectedMedia={mediaModel.selectedMedia}
+          themeOptions={mediaModel.themeOptions}
+          mediaOptions={mediaModel.mediaOptions}
+          previousHref={previousHref}
+          nextHref={nextHref}
         />
-      </section>
 
-      <section>
-        <p className="text-sm uppercase tracking-[0.42em] text-copper">
-          NFT detail
-        </p>
-        <h1 className="mt-4 text-5xl font-semibold tracking-[-0.06em] text-ivory sm:text-7xl">
-          {formatTokenId(token.tokenId)}
-        </h1>
-        <p className="mt-5 max-w-2xl text-lg leading-8 text-bone/70">
-          View artwork, check the order book, and buy, bid, list, or transfer
-          this token.
-        </p>
-
-        <div className="mt-8 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-[1.5rem] border border-ivory/10 bg-ivory/[0.045] p-4">
-            <p className="text-xs uppercase tracking-[0.22em] text-bone/75">
-              Token
-            </p>
-            <p className="mt-2 font-semibold text-ivory">
+        <section className="rounded-[2.5rem] border border-ivory/10 bg-ivory/[0.045] p-6 sm:p-8">
+          <p className="text-sm uppercase tracking-[0.42em] text-copper">
+            {collection.shortName} detail
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <span className="rounded-full border border-ivory/10 bg-ink/45 px-3 py-1 text-sm font-semibold text-bone">
               {formatTokenId(token.tokenId)}
-            </p>
-          </div>
-          <div className="rounded-[1.5rem] border border-ivory/10 bg-ivory/[0.045] p-4">
-            <p className="text-xs uppercase tracking-[0.22em] text-bone/75">
-              Owner
-            </p>
-            <p className="mt-2 font-semibold text-ivory">
-              {shortenAddress(token.owner)}
-            </p>
-          </div>
-          <div className="rounded-[1.5rem] border border-ivory/10 bg-ivory/[0.045] p-4">
-            <p className="text-xs uppercase tracking-[0.22em] text-bone/75">
-              Current listing
-            </p>
-            <p className="mt-2 font-semibold text-chartreuse">
-              {activeSellOffer
-                ? formatEth(activeSellOffer.priceEth)
-                : "Unlisted"}
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-8 grid gap-5 lg:grid-cols-2">
-          <section className="rounded-[2rem] border border-ivory/10 bg-ivory/[0.045] p-5">
-            <h2 className="text-xl font-semibold text-ivory">
-              Collector snapshot
-            </h2>
-            <dl className="mt-5 space-y-3">
-              <div className="flex justify-between gap-4">
-                <dt className="text-bone/75">Owner</dt>
-                <dd className="text-right font-medium text-ivory">
-                  {shortenAddress(token.owner, 6)}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-bone/75">{snapshotTrait.label}</dt>
-                <dd className="text-right font-medium text-ivory">
-                  {snapshotTrait.value}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-bone/75">Minted</dt>
-                <dd className="text-right font-medium text-ivory">
-                  {formatFullDate(token.mintedAt)}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-bone/75">Highest bid</dt>
-                <dd className="text-right font-medium text-ivory">
-                  {highestBid ? formatEth(highestBid.priceEth) : "No bids yet"}
-                </dd>
-              </div>
-            </dl>
-            <p className="mt-5 break-all rounded-2xl bg-ink/55 p-4 font-mono text-xs leading-6 text-bone/78">
-              {token.seed}
-            </p>
-          </section>
-
-          <section className="rounded-[2rem] border border-ivory/10 bg-ivory/[0.045] p-5">
-            <h2 className="text-xl font-semibold text-ivory">
-              Share and provenance
-            </h2>
-            <div className="mt-5 flex flex-wrap gap-3">
-              <ButtonLink
-                href={tokenPath(collection.id, token.tokenId)}
-                variant="secondary"
-              >
-                Copy detail link
-              </ButtonLink>
-              <ButtonLink href={token.artwork.image} variant="secondary">
-                Copy image link
-              </ButtonLink>
-              {selectedMedia.type === "video" ? (
-                <ButtonLink href={selectedMedia.src} variant="secondary">
-                  Copy video link
-                </ButtonLink>
-              ) : null}
-            </div>
-          </section>
-        </div>
-
-        <section className="mt-8">
-          <div className="grid grid-cols-3 rounded-full border border-ivory/10 bg-ivory/[0.045] p-1 text-center text-sm font-semibold text-bone">
-            <span className="rounded-full bg-copper px-4 py-2 text-ink">
-              Market
             </span>
-            <span className="px-4 py-2">History</span>
-            <span className="px-4 py-2">Collector notes</span>
+            <span className="rounded-full border border-chartreuse/20 bg-chartreuse/10 px-3 py-1 text-sm font-semibold text-chartreuse">
+              {activeSellOffer
+                ? `Listed at ${formatEth(activeSellOffer.priceEth)}`
+                : "Unlisted"}
+            </span>
           </div>
+          <h1 className="mt-5 text-5xl font-semibold tracking-[-0.06em] text-ivory sm:text-7xl">
+            {token.name}
+          </h1>
+          <p className="mt-5 max-w-2xl text-lg leading-8 text-bone/72">
+            {collection.description}
+          </p>
 
-          <div className="mt-6 rounded-[2rem] border border-ivory/10 bg-ivory/[0.045]">
-            <div className="border-b border-ivory/10 p-5">
-              <h2 className="text-xl font-semibold text-ivory">Order book</h2>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-ivory/10 text-left text-xs uppercase tracking-[0.2em] text-bone/75">
-                    <th className="px-4 py-3">Buyer</th>
-                    <th className="px-4 py-3">Price</th>
-                    <th className="px-4 py-3">Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tokenOffers
-                    .filter((offer) => offer.kind === "buy")
-                    .sort((left, right) => right.priceEth - left.priceEth)
-                    .map((offer) => (
-                      <tr key={offer.id} className="border-b border-ivory/10">
-                        <td className="px-4 py-4">
-                          {offer.maker ===
-                          "0x0000000000000000000000000000000000000000"
-                            ? "Unknown"
-                            : shortenAddress(offer.maker)}
-                        </td>
-                        <td className="px-4 py-4">
-                          {formatEth(offer.priceEth)}
-                        </td>
-                        <td className="px-4 py-4">
-                          {formatDate(offer.createdAt)}
-                        </td>
-                      </tr>
-                    ))}
-                  {!tokenOffers.some((offer) => offer.kind === "buy") ? (
-                    <tr>
-                      <td className="px-4 py-4 text-bone/75" colSpan={3}>
-                        No active bids yet.
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <dl className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <HeroStat label="Owner" value={shortenAddress(token.owner, 6)} />
+            <HeroStat label={snapshotTrait.label} value={snapshotTrait.value} />
+            <HeroStat label="Minted" value={formatFullDate(token.mintedAt)} />
+            <HeroStat
+              label="Highest bid"
+              value={highestBid ? formatEth(highestBid.priceEth) : "No bids"}
+            />
+          </dl>
 
-          <div className="mt-6 rounded-[2rem] border border-ivory/10 bg-ivory/[0.045] p-5">
-            <h2 className="text-xl font-semibold text-ivory">History</h2>
-            <div className="mt-5 space-y-3">
-              {(token.tokenHistory ?? [])
-                .slice()
-                .reverse()
-                .map((record) => (
-                  <div
-                    key={`${record.blockNumber}-${record.timestamp}-${record.offerId ?? "mint"}`}
-                    className="grid gap-2 rounded-2xl bg-ink/55 p-4 text-sm sm:grid-cols-[1fr_auto]"
-                  >
-                    <p className="text-ivory">
-                      Record {record.recordType}
-                      {record.price ? ` · ${formatEth(record.price)}` : ""}
-                    </p>
-                    <p className="text-bone/75">
-                      {formatFullDate(record.dateTime)}
-                    </p>
-                  </div>
-                ))}
-            </div>
-          </div>
-
-          <div className="mt-6 rounded-[2rem] border border-ivory/10 bg-ivory/[0.045] p-5">
-            <h2 className="text-xl font-semibold text-ivory">
-              Collector notes
-            </h2>
-            <p className="mt-3 text-sm leading-6 text-bone/78">
-              {collection.shortName} metadata and market data are sourced from
-              public endpoints and verified Arbitrum contracts. Wallet actions
-              still require a connected wallet and on-chain confirmation on
-              Arbitrum.
+          <div className="mt-8 rounded-[2rem] border border-ivory/10 bg-ink/40 p-5">
+            <p className="text-xs uppercase tracking-[0.22em] text-bone/65">
+              Seed
+            </p>
+            <p className="mt-3 break-all font-mono text-xs leading-6 text-bone/78">
+              {token.seed || "Not available"}
             </p>
           </div>
         </section>
-      </section>
+      </div>
+
+      <TokenDetailTabs tabs={tabs} activeTab={mediaModel.state.tab}>
+        {mediaModel.state.tab === "history" ? (
+          <TokenHistoryPanel token={token} />
+        ) : mediaModel.state.tab === "notes" ? (
+          <TokenCollectorNotesPanel
+            collection={collection}
+            token={token}
+            detailHref={detailHref}
+            imageHref={stillImageHref}
+            videoHref={videoHref}
+          />
+        ) : (
+          <TokenMarketPanel
+            collection={collection}
+            token={token}
+            activeSellOffer={activeSellOffer}
+            highestBid={highestBid}
+            offers={tokenOffers}
+          />
+        )}
+      </TokenDetailTabs>
+    </div>
+  );
+}
+
+function HeroStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[1.5rem] border border-ivory/10 bg-ink/45 p-4">
+      <dt className="text-xs uppercase tracking-[0.22em] text-bone/65">
+        {label}
+      </dt>
+      <dd className="mt-2 break-words font-semibold text-ivory">{value}</dd>
     </div>
   );
 }

@@ -1,0 +1,313 @@
+import type { ReactNode } from "react";
+
+import type {
+  Collection,
+  MarketOffer,
+  MarketToken,
+} from "@/lib/marketplace/types";
+import { TokenActions } from "@/components/marketplace/token-actions";
+import { TokenShareActions } from "@/components/marketplace/token-share-actions";
+import { ButtonLink } from "@/components/ui/button";
+import {
+  formatFullDate,
+  formatHistoryRecords,
+  primaryTokenTrait,
+  sortOffersForDisplay,
+  visibleTokenTraits,
+} from "@/lib/marketplace/token-detail";
+import { formatDate, formatEth, shortenAddress } from "@/lib/utils";
+
+export function TokenMarketPanel({
+  collection,
+  token,
+  activeSellOffer,
+  highestBid,
+  offers,
+}: {
+  collection: Collection;
+  token: MarketToken;
+  activeSellOffer?: MarketOffer;
+  highestBid?: MarketOffer;
+  offers: MarketOffer[];
+}) {
+  const sellOffers = sortOffersForDisplay(offers, "sell");
+  const buyOffers = sortOffersForDisplay(offers, "buy");
+
+  return (
+    <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+      <div className="space-y-5">
+        <section className="rounded-[2rem] border border-ivory/10 bg-ivory/[0.045] p-5">
+          <p className="text-sm uppercase tracking-[0.28em] text-copper">
+            Live market
+          </p>
+          <h2 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-ivory">
+            {activeSellOffer ? formatEth(activeSellOffer.priceEth) : "Unlisted"}
+          </h2>
+          <dl className="mt-5 grid gap-3 sm:grid-cols-2">
+            <MarketStat
+              label="Best listing"
+              value={
+                activeSellOffer ? formatEth(activeSellOffer.priceEth) : "None"
+              }
+            />
+            <MarketStat
+              label="Highest bid"
+              value={highestBid ? formatEth(highestBid.priceEth) : "No bids"}
+            />
+          </dl>
+        </section>
+
+        <TokenActions
+          collection={collection}
+          tokenId={token.tokenId}
+          activeSellOffer={activeSellOffer}
+          offers={offers}
+        />
+      </div>
+
+      <section className="rounded-[2rem] border border-ivory/10 bg-ivory/[0.045]">
+        <div className="border-b border-ivory/10 p-5">
+          <h2 className="text-xl font-semibold text-ivory">Order book</h2>
+          <p className="mt-2 text-sm text-bone/70">
+            Listings and bids sourced from the collection marketplace contract.
+          </p>
+        </div>
+        <div className="grid gap-5 p-5 lg:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+          <OfferTable
+            title="Listings"
+            empty="No active listings yet."
+            makerLabel="Seller"
+            offers={sellOffers}
+          />
+          <OfferTable
+            title="Bids"
+            empty="No active bids yet."
+            makerLabel="Buyer"
+            offers={buyOffers}
+          />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export function TokenHistoryPanel({ token }: { token: MarketToken }) {
+  const records = formatHistoryRecords(token.tokenHistory);
+
+  return (
+    <section className="rounded-[2rem] border border-ivory/10 bg-ivory/[0.045] p-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-sm uppercase tracking-[0.28em] text-copper">
+            Provenance
+          </p>
+          <h2 className="mt-3 text-2xl font-semibold text-ivory">
+            Token history
+          </h2>
+        </div>
+        <p className="text-sm text-bone/70">
+          {records.length.toLocaleString("en-US")} records
+        </p>
+      </div>
+
+      {records.length ? (
+        <div className="mt-6 space-y-3">
+          {records.map((record) => (
+            <article
+              key={record.key}
+              className="grid gap-3 rounded-2xl bg-ink/55 p-4 text-sm sm:grid-cols-[1fr_auto]"
+            >
+              <div>
+                <h3 className="font-semibold text-ivory">
+                  {record.title}
+                  {record.price ? ` · ${record.price}` : ""}
+                </h3>
+                <p className="mt-1 text-bone/70">{record.subtitle}</p>
+              </div>
+              <p className="text-bone/75">{record.date}</p>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <EmptyState>
+          No public transfer history is available from this collection endpoint
+          yet. Marketplace actions still read from verified Arbitrum contracts.
+        </EmptyState>
+      )}
+    </section>
+  );
+}
+
+export function TokenCollectorNotesPanel({
+  collection,
+  token,
+  detailHref,
+  imageHref,
+  videoHref,
+}: {
+  collection: Collection;
+  token: MarketToken;
+  detailHref: string;
+  imageHref: string;
+  videoHref?: string;
+}) {
+  const primaryTrait = primaryTokenTrait(token);
+  const traits = visibleTokenTraits(token);
+  const shareLinks = [
+    { label: "detail link", value: detailHref },
+    { label: "image link", value: imageHref },
+    ...(videoHref ? [{ label: "video link", value: videoHref }] : []),
+  ];
+
+  return (
+    <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+      <section className="rounded-[2rem] border border-ivory/10 bg-ivory/[0.045] p-5">
+        <p className="text-sm uppercase tracking-[0.28em] text-copper">
+          Collector notes
+        </p>
+        <h2 className="mt-3 text-2xl font-semibold text-ivory">
+          Metadata, provenance, and art system
+        </h2>
+        <p className="mt-4 text-sm leading-6 text-bone/78">
+          {collection.shortName} metadata is normalized into a shared Axiom Zero
+          token model, while trading actions are checked against verified
+          Arbitrum contracts. This token belongs to {collection.name}, an art
+          system described as {collection.artSystem.toLowerCase()}.
+        </p>
+
+        <dl className="mt-6 grid gap-3 sm:grid-cols-2">
+          <MarketStat label="Owner" value={shortenAddress(token.owner, 6)} />
+          <MarketStat label={primaryTrait.label} value={primaryTrait.value} />
+          <MarketStat label="Minted" value={formatFullDate(token.mintedAt)} />
+          <MarketStat
+            label="Collection"
+            value={collection.supplyNoun.singular}
+          />
+        </dl>
+
+        <div className="mt-6">
+          <ButtonLink
+            href={collection.externalUrl}
+            variant="secondary"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Visit collection site
+          </ButtonLink>
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] border border-ivory/10 bg-ivory/[0.045] p-5">
+        <h2 className="text-xl font-semibold text-ivory">Traits and links</h2>
+        {traits.length ? (
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {traits.map((trait) => (
+              <div
+                key={`${trait.label}-${trait.value}`}
+                className="rounded-2xl bg-ink/55 p-4"
+              >
+                <p className="text-xs uppercase tracking-[0.2em] text-bone/60">
+                  {trait.label}
+                </p>
+                <p className="mt-2 break-words font-semibold text-ivory">
+                  {trait.value}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState>
+            No normalized traits are available for this token.
+          </EmptyState>
+        )}
+
+        <div className="mt-5 rounded-2xl bg-ink/55 p-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-bone/60">
+            Seed
+          </p>
+          <p className="mt-2 break-all font-mono text-xs leading-6 text-bone/78">
+            {token.seed || "Not available"}
+          </p>
+        </div>
+
+        <div className="mt-5">
+          <TokenShareActions links={shareLinks} />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function MarketStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[1.35rem] border border-ivory/10 bg-ink/40 p-4">
+      <dt className="text-xs uppercase tracking-[0.22em] text-bone/65">
+        {label}
+      </dt>
+      <dd className="mt-2 break-words font-semibold text-ivory">{value}</dd>
+    </div>
+  );
+}
+
+function OfferTable({
+  title,
+  empty,
+  makerLabel,
+  offers,
+}: {
+  title: string;
+  empty: string;
+  makerLabel: string;
+  offers: MarketOffer[];
+}) {
+  return (
+    <div className="overflow-hidden rounded-[1.5rem] border border-ivory/10">
+      <div className="border-b border-ivory/10 bg-ink/35 px-4 py-3">
+        <h3 className="font-semibold text-ivory">{title}</h3>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-ivory/10 text-left text-xs uppercase tracking-[0.18em] text-bone/65">
+              <th className="px-4 py-3">{makerLabel}</th>
+              <th className="px-4 py-3">Price</th>
+              <th className="px-4 py-3">Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            {offers.map((offer) => (
+              <tr key={offer.id} className="border-b border-ivory/10">
+                <td className="px-4 py-4">{formatMaker(offer.maker)}</td>
+                <td className="px-4 py-4 text-chartreuse">
+                  {formatEth(offer.priceEth)}
+                </td>
+                <td className="px-4 py-4">{formatDate(offer.createdAt)}</td>
+              </tr>
+            ))}
+            {!offers.length ? (
+              <tr>
+                <td className="px-4 py-4 text-bone/75" colSpan={3}>
+                  {empty}
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ children }: { children: ReactNode }) {
+  return (
+    <p className="mt-5 rounded-2xl border border-ivory/10 bg-ink/45 p-4 text-sm leading-6 text-bone/75">
+      {children}
+    </p>
+  );
+}
+
+function formatMaker(address: string) {
+  return address === "0x0000000000000000000000000000000000000000"
+    ? "Unknown"
+    : shortenAddress(address);
+}

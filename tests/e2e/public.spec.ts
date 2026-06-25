@@ -21,10 +21,7 @@ test("home page introduces Axiom Zero and links to collection pages", async ({
     .getByRole("main")
     .getByRole("link", { name: /^random walk$/i });
   await expect(randomWalkLink).toBeVisible();
-  await Promise.all([
-    page.waitForURL(/\/random-walk/),
-    randomWalkLink.click(),
-  ]);
+  await Promise.all([page.waitForURL(/\/random-walk/), randomWalkLink.click()]);
   await expect(
     page.getByRole("heading", { name: /^random walk$/i }),
   ).toBeVisible();
@@ -79,11 +76,19 @@ test("token detail page shows order book and wallet prompt", async ({
 }) => {
   await page.goto("/token/random-walk/1233");
 
-  await expect(page.getByRole("heading", { name: /#001233/i })).toBeVisible();
-  await expect(page.getByText(/current listing/i).first()).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /random walk #001233/i }),
+  ).toBeVisible();
+  await expect(page.getByText(/live market/i).first()).toBeVisible();
   await expect(page.getByText(/connect a wallet/i).first()).toBeVisible();
   await expect(
     page.getByRole("heading", { name: /order book/i }),
+  ).toBeVisible();
+
+  await page.getByRole("tab", { name: /history/i }).click();
+  await expect(page).toHaveURL(/tab=history/);
+  await expect(
+    page.getByRole("heading", { name: /token history/i }),
   ).toBeVisible();
 });
 
@@ -92,11 +97,20 @@ test("cosmic signature token detail page renders live metadata", async ({
 }) => {
   await page.goto("/token/cosmic-signature/1");
 
-  await expect(page.getByRole("heading", { name: /#000001/i })).toBeVisible();
   await expect(
-    page.getByText(/cosmic signature metadata and market data/i),
+    page.getByRole("heading", { name: /numba 1|cosmic signature #1/i }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: /^light$/i })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /triple video/i })).toHaveCount(
+    0,
+  );
+  await expect(page.getByRole("link", { name: /single video/i })).toBeVisible();
+  await page.getByRole("tab", { name: /collector notes/i }).click();
+  await expect(page).toHaveURL(/tab=notes/);
+  await expect(
+    page.getByText(/cosmic signature metadata is normalized/i),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: /order book/i }),
+    page.getByRole("button", { name: /copy detail link/i }),
   ).toBeVisible();
 });
