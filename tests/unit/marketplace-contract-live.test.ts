@@ -6,6 +6,7 @@ import {
   normalizeContractOffer,
   type MarketplaceOfferTuple,
 } from "@/lib/marketplace/marketplace-contract-live";
+import { randomWalkTokenPreview } from "@/lib/marketplace/random-walk-live";
 
 const cosmicNft = "0xbb84Be3500A63581d3F2d5AC3bdF8685AAedad25" as const;
 const otherNft = "0x895a6F444BE4ba9d124F61DF736605792B35D66b" as const;
@@ -105,21 +106,13 @@ describe("marketplace contract live adapter", () => {
 
   it("drops inactive, free, and ambiguous offers", () => {
     expect(
-      normalizeContractOffer(
-        1,
-        offer({ active: false }),
-        "cosmic-signature",
-      ),
+      normalizeContractOffer(1, offer({ active: false }), "cosmic-signature"),
     ).toBeUndefined();
     expect(
       normalizeContractOffer(1, offer({ price: 0n }), "cosmic-signature"),
     ).toBeUndefined();
     expect(
-      normalizeContractOffer(
-        1,
-        offer({ seller, buyer }),
-        "cosmic-signature",
-      ),
+      normalizeContractOffer(1, offer({ seller, buyer }), "cosmic-signature"),
     ).toBeUndefined();
   });
 
@@ -191,6 +184,37 @@ describe("marketplace contract live adapter", () => {
       "token-2.png",
     ]);
     expect(loadToken).toHaveBeenCalledTimes(2);
+  });
+
+  it("scans Random Walk offers by NFT address and attaches deterministic previews", async () => {
+    const client = mockClient({
+      0: offer({ nftAddress: otherNft, tokenId: 1233n }),
+      1: offer({ nftAddress: cosmicNft, tokenId: 2n, seller: zero, buyer }),
+    });
+    const loadToken = vi.fn(async (tokenId: number) =>
+      randomWalkTokenPreview(tokenId),
+    );
+
+    const offers = await fetchCollectionContractOffers({
+      collectionId: "random-walk",
+      nftAddress: otherNft,
+      marketplaceAddress: marketplace,
+      loadToken,
+      client,
+    });
+
+    expect(offers).toEqual([
+      expect.objectContaining({
+        id: "random-walk-sell-0",
+        collectionId: "random-walk",
+        tokenId: 1233,
+        artwork: expect.objectContaining({
+          image:
+            "https://api.randomwalknft.com:1443/images/randomwalk/001233_black_thumb.jpg",
+        }),
+      }),
+    ]);
+    expect(loadToken).toHaveBeenCalledWith(1233);
   });
 
   it("respects the collection scan limit", async () => {

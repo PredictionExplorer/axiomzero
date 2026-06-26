@@ -2,18 +2,18 @@ import { collections, requireCollection } from "@/config/collections";
 import type {
   CollectionId,
   MarketOffer,
+  MarketToken,
   MarketplaceTokenPage,
   MarketplaceView,
   MarketplaceSearchParams,
   MarketplaceStats,
-  OfferKind,
   SortKey,
   TokenMarketSummary,
 } from "@/lib/marketplace/types";
 import {
-  fetchRandomWalkMarketplaceOffers,
   fetchRandomWalkMetadata,
   fetchRandomWalkTokenDetail,
+  randomWalkTokenPreview,
 } from "@/lib/marketplace/random-walk-live";
 import { fetchCosmicSignatureMetadata } from "@/lib/marketplace/cosmic-signature-live";
 import { getCollectionTokenIds } from "@/lib/marketplace/collection-index-live";
@@ -24,7 +24,7 @@ import {
 import { isDisplayableOffer } from "@/lib/marketplace/offers";
 
 const collectionIds = new Set(collections.map((collection) => collection.id));
-const offerKinds = new Set(["buy", "sell"]);
+const offerKinds = new Set(["buy", "sell", "all"]);
 const marketplaceViews = new Set(["discover", "listings", "top-bids"]);
 const sortKeys = new Set(["price-asc", "price-desc", "recent"]);
 const DEFAULT_TOKEN_PAGE = 1;
@@ -99,8 +99,8 @@ export function parseMarketplaceSearchParams(
         ? (collection as CollectionId)
         : "all",
     kind:
-      kind && offerKinds.has(kind as OfferKind)
-        ? (kind as OfferKind)
+      kind && offerKinds.has(kind)
+        ? (kind as MarketplaceSearchParams["kind"])
         : fallbackKind,
     view: parsedView,
     query: firstValue(params.query)?.trim() || undefined,
@@ -183,22 +183,15 @@ async function getMarketplaceOffersForCollection(
 ) {
   const requestedKind =
     search.kind && search.kind !== "all" ? search.kind : "sell";
-
-  if (collectionId === "random-walk") {
-    return search.kind === "all"
-      ? [
-          ...(await fetchRandomWalkMarketplaceOffers("sell", search.sort)),
-          ...(await fetchRandomWalkMarketplaceOffers("buy", search.sort)),
-        ]
-      : await fetchRandomWalkMarketplaceOffers(requestedKind, search.sort);
-  }
-
   const collection = requireCollection(collectionId);
   const offers = await fetchCollectionContractOffers({
     collectionId,
     nftAddress: collection.nftAddress,
     marketplaceAddress: collection.marketplaceAddress,
-    loadToken: fetchCosmicSignatureMetadata,
+    loadToken:
+      collectionId === "random-walk"
+        ? async (tokenId) => randomWalkTokenPreview(tokenId)
+        : fetchCosmicSignatureMetadata,
   });
 
   return search.kind === "all"
@@ -352,33 +345,12 @@ export async function getToken(collectionId: CollectionId, tokenId: number) {
   return fetchCosmicSignatureMetadata(tokenId);
 }
 
-async function fetchRandomWalkOffersForToken(tokenId: number) {
-  const offerResults = await Promise.allSettled([
-    fetchRandomWalkMarketplaceOffers("sell", "price-asc"),
-    fetchRandomWalkMarketplaceOffers("buy", "price-desc"),
-  ]);
-
-  return offerResults
-    .flatMap((result) => (result.status === "fulfilled" ? result.value : []))
-    .filter((offer) => offer.tokenId === tokenId);
-}
-
-export async function getOffersForToken(
+async function fetchContractOffersForCollectionToken(
   collectionId: CollectionId,
   tokenId: number,
+  token: Pick<MarketToken, "artwork">,
 ) {
-  await assertMintedToken(collectionId, tokenId);
-
-  if (collectionId === "random-walk") {
-    try {
-      return (await fetchRandomWalkTokenDetail(tokenId)).offers;
-    } catch {
-      return fetchRandomWalkOffersForToken(tokenId);
-    }
-  }
-
   const collection = requireCollection(collectionId);
-  const token = await fetchCosmicSignatureMetadata(tokenId);
 
   return fetchContractOffersForTokenId({
     collectionId,
@@ -389,6 +361,29 @@ export async function getOffersForToken(
   });
 }
 
+export async function getOffersForToken(
+  collectionId: CollectionId,
+  tokenId: number,
+) {
+  await assertMintedToken(collectionId, tokenId);
+
+  if (collectionId === "random-walk") {
+    try {
+      return await fetchContractOffersForCollectionToken(
+        collectionId,
+        tokenId,
+        randomWalkTokenPreview(tokenId),
+      );
+    } catch {
+      return (await fetchRandomWalkTokenDetail(tokenId)).offers;
+    }
+  }
+
+  const token = await fetchCosmicSignatureMetadata(tokenId);
+
+  return fetchContractOffersForCollectionToken(collectionId, tokenId, token);
+}
+
 export async function getTokenMarket(
   collectionId: CollectionId,
   tokenId: number,
@@ -397,10 +392,21 @@ export async function getTokenMarket(
 
   if (collectionId === "random-walk") {
     try {
-      return await fetchRandomWalkTokenDetail(tokenId);
+      const market = await fetchRandomWalkTokenDetail(tokenId);
+      const offers = await fetchContractOffersForCollectionToken(
+        collectionId,
+        tokenId,
+        market.token,
+      ).catch(() => market.offers);
+
+      return { token: market.token, offers };
     } catch {
       const token = await fetchRandomWalkMetadata(tokenId);
-      const offers = await fetchRandomWalkOffersForToken(tokenId);
+      const offers = await fetchContractOffersForCollectionToken(
+        collectionId,
+        tokenId,
+        token,
+      ).catch(() => []);
 
       return {
         token,
@@ -412,15 +418,12 @@ export async function getTokenMarket(
     }
   }
 
-  const collection = requireCollection(collectionId);
   const token = await fetchCosmicSignatureMetadata(tokenId);
-  const offers = await fetchContractOffersForTokenId({
+  const offers = await fetchContractOffersForCollectionToken(
     collectionId,
-    nftAddress: collection.nftAddress,
-    marketplaceAddress: collection.marketplaceAddress,
     tokenId,
-    artwork: token.artwork,
-  });
+    token,
+  );
 
   return { token, offers };
 }

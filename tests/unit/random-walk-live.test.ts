@@ -6,6 +6,8 @@ import {
   fetchRandomWalkTokenDetail,
   parseRandomWalkDetailHtml,
   parseRandomWalkMarketplaceHtml,
+  randomWalkArtwork,
+  randomWalkTokenPreview,
   tokenFromRandomWalkMetadata,
 } from "@/lib/marketplace/random-walk-live";
 
@@ -240,6 +242,24 @@ describe("Random Walk live data adapter", () => {
     );
   });
 
+  it("builds deterministic artwork and preview tokens without fetching metadata", () => {
+    expect(randomWalkArtwork(7)).toEqual({
+      image:
+        "https://api.randomwalknft.com:1443/images/randomwalk/000007_black_thumb.jpg",
+      alt: "Random Walk #000007 artwork",
+    });
+    expect(randomWalkTokenPreview(7)).toMatchObject({
+      collectionId: "random-walk",
+      tokenId: 7,
+      name: "Random Walk #000007",
+      seed: "",
+      artwork: {
+        image:
+          "https://api.randomwalknft.com:1443/images/randomwalk/000007_black_thumb.jpg",
+      },
+    });
+  });
+
   it("fetches marketplace offers with Random Walk query parameters", async () => {
     const html = String.raw`
       ["$","div","buy-319",{"children":[["$","$L1f",null,{"id":3435,"image":"buy.jpg","href":"/detail/3435"}],["$","span",null,{"children":["#003435"," · ","0.0010 ETH"]}]]}]
@@ -257,6 +277,38 @@ describe("Random Walk live data adapter", () => {
       id: "buy-319-3435-0.0010",
       priceEth: 0.001,
     });
+  });
+
+  it("rejects redirected Axiom Zero HTML from the legacy marketplace scraper", async () => {
+    const response = new Response(
+      "<html>Axiom Zero /token/random-walk/7</html>",
+    );
+    Object.defineProperty(response, "redirected", { value: true });
+    Object.defineProperty(response, "url", {
+      value: "https://www.axiomzero.market/random-walk",
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response),
+    );
+
+    await expect(fetchRandomWalkMarketplaceOffers()).rejects.toThrow(
+      "Random Walk marketplace redirected away from the collection source.",
+    );
+  });
+
+  it("rejects Axiom Zero HTML that would otherwise parse as an empty market", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response('<html>Axiom Zero <a href="/token/random-walk/7">'),
+      ),
+    );
+
+    await expect(fetchRandomWalkMarketplaceOffers()).rejects.toThrow(
+      "Random Walk marketplace returned Axiom Zero HTML instead of marketplace data.",
+    );
   });
 
   it("surfaces failed marketplace, detail, and metadata fetches", async () => {

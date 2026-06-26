@@ -132,6 +132,9 @@ describe("marketplace queries", () => {
     ).toMatchObject({
       kind: "sell",
     });
+    expect(parseMarketplaceSearchParams({ kind: "all" })).toMatchObject({
+      kind: "all",
+    });
   });
 
   it("filters by collection, kind, token, and price", () => {
@@ -299,14 +302,19 @@ describe("marketplace queries", () => {
     ).toEqual(["one"]);
   });
 
-  it("fetches and filters live Random Walk marketplace offers", async () => {
-    const sellHtml = String.raw`["$","div","sell-1",{"children":[["$","$L1f",null,{"id":1,"image":"sell.jpg","href":"/detail/1"}],["$","span",null,{"children":["#000001"," · ","1.0000 ETH"]}]]}]`;
-    const buyHtml = String.raw`["$","div","buy-2",{"children":[["$","$L1f",null,{"id":2,"image":"buy.jpg","href":"/detail/2"}],["$","span",null,{"children":["#000002"," · ","0.5000 ETH"]}]]}]`;
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(sellHtml))
-      .mockResolvedValueOnce(new Response(buyHtml));
-    vi.stubGlobal("fetch", fetchMock);
+  it("fetches and filters Random Walk offers from the marketplace contract", async () => {
+    contractMocks.fetchCollectionContractOffers.mockResolvedValueOnce([
+      baseOffers[0],
+      {
+        id: "bid",
+        collectionId: "random-walk",
+        tokenId: 2,
+        kind: "buy",
+        priceEth: 0.5,
+        maker: "0x0000000000000000000000000000000000000002",
+        createdAt: "2026-01-02T00:00:00.000Z",
+      },
+    ]);
 
     const offers = await getMarketplaceOffers({
       collection: "random-walk",
@@ -315,14 +323,32 @@ describe("marketplace queries", () => {
       sort: "price-asc",
     });
 
-    expect(offers.map((offer) => offer.id)).toEqual(["sell-1-1-1.0000"]);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(offers.map((offer) => offer.id)).toEqual(["one"]);
+    expect(contractMocks.fetchCollectionContractOffers).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collectionId: "random-walk",
+        nftAddress: "0x895a6F444BE4ba9d124F61DF736605792B35D66b",
+        marketplaceAddress: "0x47eF85Dfb775aCE0934fBa9EEd09D22e6eC0Cc08",
+        loadToken: expect.any(Function),
+      }),
+    );
   });
 
   it("loads a small token discovery page from token search", async () => {
     const detailHtml = String.raw`
       self.__next_f.push([1,"{\"nft\":{\"id\":9,\"owner\":\"0x0000000000000000000000000000000000000001\",\"seed\":\"seed\"},\"buyOffers\":[{\"id\":2,\"offerId\":2,\"tokenId\":9,\"seller\":\"0x0000000000000000000000000000000000000000\",\"buyer\":\"0x0000000000000000000000000000000000000002\",\"price\":0.2,\"active\":true,\"createdAt\":\"2026-01-02T00:00:00.000Z\",\"createdAtTimestamp\":1,\"kind\":\"buy\"}],\"sellOffers\":[]}"]);
     `;
+    contractMocks.fetchContractOffersForTokenId.mockResolvedValueOnce([
+      {
+        id: "contract-bid",
+        collectionId: "random-walk",
+        tokenId: 9,
+        kind: "buy",
+        priceEth: 0.4,
+        maker: "0x0000000000000000000000000000000000000004",
+        createdAt: "1970-01-01T00:00:00.000Z",
+      },
+    ]);
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response(detailHtml)),
@@ -343,7 +369,7 @@ describe("marketplace queries", () => {
       totalPages: 1,
     });
     expect(page.items[0]?.token.tokenId).toBe(9);
-    expect(page.items[0]?.highestBid?.priceEth).toBe(0.2);
+    expect(page.items[0]?.highestBid?.priceEth).toBe(0.4);
   });
 
   it("builds discovery pages from the live minted token index", async () => {
@@ -373,9 +399,19 @@ describe("marketplace queries", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("falls back to Random Walk metadata and marketplace orders when detail loading fails", async () => {
+  it("falls back to Random Walk metadata and contract orders when detail loading fails", async () => {
     indexMocks.getCollectionTokenIds.mockResolvedValueOnce([3456]);
-    const buyHtml = String.raw`["$","div","buy-175",{"children":[["$","$L1f",null,{"id":3456,"image":"buy.jpg","href":"/detail/3456"}],["$","span",null,{"children":["#003456"," · ","0.8000 ETH"]}]]}]`;
+    contractMocks.fetchContractOffersForTokenId.mockResolvedValueOnce([
+      {
+        id: "contract-bid",
+        collectionId: "random-walk",
+        tokenId: 3456,
+        kind: "buy",
+        priceEth: 0.8,
+        maker: "0x0000000000000000000000000000000000000002",
+        createdAt: "1970-01-01T00:00:00.000Z",
+      },
+    ]);
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(new Response("", { status: 503 }))
@@ -386,9 +422,7 @@ describe("marketplace queries", () => {
             properties: { seed: "metadata-seed" },
           }),
         ),
-      )
-      .mockResolvedValueOnce(new Response(""))
-      .mockResolvedValueOnce(new Response(buyHtml));
+      );
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(getTokenMarket("random-walk", 3456)).resolves.toMatchObject({
@@ -428,12 +462,9 @@ describe("marketplace queries", () => {
   });
 
   it("merges both collection sources when all collections are selected", async () => {
-    const sellHtml = String.raw`["$","div","sell-1",{"children":[["$","$L1f",null,{"id":1,"image":"sell.jpg","href":"/detail/1"}],["$","span",null,{"children":["#000001"," · ","1.0000 ETH"]}]]}]`;
-    const fetchMock = vi.fn(async () => new Response(sellHtml));
-    vi.stubGlobal("fetch", fetchMock);
-    contractMocks.fetchCollectionContractOffers.mockResolvedValueOnce([
-      baseOffers[1],
-    ]);
+    contractMocks.fetchCollectionContractOffers
+      .mockResolvedValueOnce([baseOffers[0]])
+      .mockResolvedValueOnce([baseOffers[1]]);
 
     const offers = await getMarketplaceOffers({
       collection: "all",
@@ -442,9 +473,8 @@ describe("marketplace queries", () => {
     });
 
     expect(offers.map((offer) => offer.collectionId)).toEqual(["random-walk"]);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(contractMocks.fetchCollectionContractOffers).toHaveBeenCalledTimes(
-      1,
+      2,
     );
   });
 
@@ -463,7 +493,6 @@ describe("marketplace queries", () => {
     };
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(new Response(detailHtml))
       .mockResolvedValueOnce(new Response(detailHtml))
       .mockResolvedValueOnce(new Response("", { status: 404 }))
       .mockResolvedValueOnce(
@@ -497,6 +526,15 @@ describe("marketplace queries", () => {
         token: { collectionId: "cosmic-signature", tokenId: 10 },
         offers: [baseOffers[1]],
       },
+    );
+    expect(contractMocks.fetchContractOffersForTokenId).toHaveBeenCalledTimes(
+      4,
+    );
+    expect(contractMocks.fetchContractOffersForTokenId).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collectionId: "random-walk",
+        tokenId: 9,
+      }),
     );
     expect(contractMocks.fetchContractOffersForTokenId).toHaveBeenCalledWith(
       expect.objectContaining({

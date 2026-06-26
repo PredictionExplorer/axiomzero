@@ -3,6 +3,7 @@ import type {
   MarketToken,
   OfferKind,
   SortKey,
+  TokenArtwork,
   TokenHistoryRecord,
 } from "@/lib/marketplace/types";
 import { isDisplayableOffer } from "@/lib/marketplace/offers";
@@ -115,6 +116,14 @@ function decodeFlightMarkup(html: string) {
   return html.replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/&amp;/g, "&");
 }
 
+function isAxiomZeroMarketplaceHtml(html: string) {
+  return (
+    html.includes("axiomzero.market") ||
+    html.includes("/token/random-walk/") ||
+    html.includes("Axiom Zero")
+  );
+}
+
 function formatRandomWalkName(tokenId: number) {
   return `Random Walk #${String(tokenId).padStart(6, "0")}`;
 }
@@ -124,6 +133,30 @@ function thumbUrl(tokenId: number) {
     6,
     "0",
   )}_black_thumb.jpg`;
+}
+
+export function randomWalkArtwork(tokenId: number): TokenArtwork {
+  return {
+    image: thumbUrl(tokenId),
+    alt: `${formatRandomWalkName(tokenId)} artwork`,
+  };
+}
+
+export function randomWalkTokenPreview(tokenId: number): MarketToken {
+  const artwork = randomWalkArtwork(tokenId);
+
+  return {
+    collectionId: "random-walk",
+    tokenId,
+    name: formatRandomWalkName(tokenId),
+    owner: ZERO_ADDRESS,
+    seed: "",
+    traits: [],
+    artwork,
+    assets: {
+      blackThumb: artwork.image,
+    },
+  };
 }
 
 function coerceAddress(value: string | undefined): `0x${string}` | undefined {
@@ -321,7 +354,7 @@ export function parseRandomWalkDetailHtml(html: string): {
     image:
       payload.nft.assets?.blackImage ??
       payload.nft.assets?.blackThumb ??
-      thumbUrl(tokenId),
+      randomWalkArtwork(tokenId).image,
     alt: `${formatRandomWalkName(tokenId)} artwork`,
   };
   const offers = [...(payload.sellOffers ?? []), ...(payload.buyOffers ?? [])]
@@ -375,12 +408,12 @@ export function tokenFromRandomWalkMetadata(
       value: String(attribute.value ?? ""),
     })) ?? [{ label: "Seed", value: String(seed) }],
     artwork: {
-      image: metadata.image ?? thumbUrl(tokenId),
+      image: metadata.image ?? randomWalkArtwork(tokenId).image,
       alt: `${formatRandomWalkName(tokenId)} artwork`,
     },
     assets: {
       blackImage: metadata.image,
-      blackThumb: thumbUrl(tokenId),
+      blackThumb: randomWalkArtwork(tokenId).image,
       blackSingleVideo: metadata.animation_url,
     },
   };
@@ -411,7 +444,22 @@ export async function fetchRandomWalkMarketplaceOffers(
     throw new Error(`Random Walk marketplace returned ${response.status}.`);
   }
 
-  return parseRandomWalkMarketplaceHtml(await response.text(), kind);
+  if (response.redirected || response.url.includes("axiomzero.market")) {
+    throw new Error(
+      "Random Walk marketplace redirected away from the collection source.",
+    );
+  }
+
+  const html = await response.text();
+  const offers = parseRandomWalkMarketplaceHtml(html, kind);
+
+  if (!offers.length && isAxiomZeroMarketplaceHtml(html)) {
+    throw new Error(
+      "Random Walk marketplace returned Axiom Zero HTML instead of marketplace data.",
+    );
+  }
+
+  return offers;
 }
 
 export async function fetchRandomWalkTokenDetail(tokenId: number) {
