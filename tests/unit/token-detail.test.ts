@@ -159,10 +159,31 @@ describe("token detail helpers", () => {
       sortOffersForDisplay(
         [
           offer({ id: "low", kind: "buy", priceEth: 0.1 }),
+          offer({
+            id: "inactive-high",
+            kind: "buy",
+            priceEth: 10,
+            active: false,
+          }),
           offer({ id: "high", kind: "buy", priceEth: 2 }),
         ],
         "buy",
       ).map((sortedOffer) => sortedOffer.id),
     ).toEqual(["high", "low"]);
+    expect(
+      sortOffersForDisplay(
+        [
+          offer({ id: "expensive", kind: "sell", priceEth: 2 }),
+          offer({
+            id: "inactive-cheap",
+            kind: "sell",
+            priceEth: 0.01,
+            active: false,
+          }),
+          offer({ id: "cheap", kind: "sell", priceEth: 1 }),
+        ],
+        "sell",
+      ).map((sortedOffer) => sortedOffer.id),
+    ).toEqual(["cheap", "expensive"]);
   });
 });

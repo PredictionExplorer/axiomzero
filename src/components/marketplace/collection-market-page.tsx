@@ -41,10 +41,20 @@ export async function CollectionMarketPage({
       : activeView === "listings"
         ? { ...search, kind: "sell" as const }
         : { ...search, kind: "all" as const };
-  const statsSearch = { ...search, kind: "all" as const };
+  const statsSearch = {
+    collection: collectionId,
+    kind: "all" as const,
+    view: "discover" as const,
+    sort: "price-asc" as const,
+  } satisfies MarketplaceSearchParams;
+  const canReuseVisibleOffers =
+    offerSearch.kind === "all" &&
+    search.query === undefined &&
+    search.min === undefined &&
+    search.max === undefined;
   const [visibleOffers, statsOffers, tokenPage, supply] = await Promise.all([
     getMarketplaceOffers(offerSearch),
-    offerSearch.kind === "all"
+    canReuseVisibleOffers
       ? Promise.resolve(undefined)
       : getMarketplaceOffers(statsSearch),
     activeView === "discover"
@@ -78,8 +88,8 @@ export async function CollectionMarketPage({
             {collection.artSystem}
           </p>
           <p className="mt-4 text-sm leading-6 text-bone/75">
-            View live listings, highest bids, and token detail pages for a
-            clean collection-specific market.
+            View live listings, highest bids, and token detail pages for a clean
+            collection-specific market.
           </p>
         </div>
       </section>

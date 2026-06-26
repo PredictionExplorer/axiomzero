@@ -21,6 +21,7 @@ import {
   fetchCollectionContractOffers,
   fetchContractOffersForTokenId,
 } from "@/lib/marketplace/marketplace-contract-live";
+import { isDisplayableOffer } from "@/lib/marketplace/offers";
 
 const collectionIds = new Set(collections.map((collection) => collection.id));
 const offerKinds = new Set(["buy", "sell"]);
@@ -124,6 +125,10 @@ export function filterOffers(
   search: MarketplaceSearchParams,
 ) {
   return allOffers.filter((offer) => {
+    if (!isDisplayableOffer(offer)) {
+      return false;
+    }
+
     if (search.collection && search.collection !== "all") {
       if (offer.collectionId !== search.collection) {
         return false;
@@ -220,11 +225,12 @@ export async function getMarketplaceOffers(search: MarketplaceSearchParams) {
 export function getMarketplaceStats(
   allOffers: MarketOffer[],
 ): MarketplaceStats {
-  const sellOffers = allOffers.filter((offer) => offer.kind === "sell");
-  const buyOffers = allOffers.filter((offer) => offer.kind === "buy");
+  const activeOffers = allOffers.filter(isDisplayableOffer);
+  const sellOffers = activeOffers.filter((offer) => offer.kind === "sell");
+  const buyOffers = activeOffers.filter((offer) => offer.kind === "buy");
 
   return {
-    totalOffers: allOffers.length,
+    totalOffers: activeOffers.length,
     floorOffer: sortOffers(sellOffers, "price-asc")[0],
     topBidOffer: sortOffers(buyOffers, "price-desc")[0],
     sellListings: sellOffers.length,
@@ -236,14 +242,17 @@ export function summarizeTokenMarket(tokenMarket: {
   token: TokenMarketSummary["token"];
   offers: MarketOffer[];
 }): TokenMarketSummary {
+  const activeOffers = tokenMarket.offers.filter(isDisplayableOffer);
+
   return {
     ...tokenMarket,
+    offers: activeOffers,
     activeSellOffer: sortOffers(
-      tokenMarket.offers.filter((offer) => offer.kind === "sell"),
+      activeOffers.filter((offer) => offer.kind === "sell"),
       "price-asc",
     )[0],
     highestBid: sortOffers(
-      tokenMarket.offers.filter((offer) => offer.kind === "buy"),
+      activeOffers.filter((offer) => offer.kind === "buy"),
       "price-desc",
     )[0],
   };

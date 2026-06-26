@@ -5,10 +5,17 @@ import type { MarketOffer } from "@/lib/marketplace/types";
 
 const queryMocks = vi.hoisted(() => ({
   getMarketplaceOffers: vi.fn(),
-  getMarketplaceStats: vi.fn(),
 }));
 
-vi.mock("@/lib/marketplace/queries", () => queryMocks);
+vi.mock("@/lib/marketplace/queries", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/marketplace/queries")>();
+
+  return {
+    ...actual,
+    getMarketplaceOffers: queryMocks.getMarketplaceOffers,
+  };
+});
 
 import Home from "@/app/page";
 
@@ -29,11 +36,33 @@ describe("Home", () => {
   it("links to the three main destinations and token-specific market stats", async () => {
     const randomWalkOffers = [
       marketOffer({
+        id: "rw-higher-listing",
+        collectionId: "random-walk",
+        tokenId: 5,
+        kind: "sell",
+        priceEth: 3,
+      }),
+      marketOffer({
+        id: "rw-inactive-low-listing",
+        collectionId: "random-walk",
+        tokenId: 6,
+        kind: "sell",
+        priceEth: 0.1,
+        active: false,
+      }),
+      marketOffer({
         id: "rw-floor",
         collectionId: "random-walk",
         tokenId: 7,
         kind: "sell",
         priceEth: 1.5,
+      }),
+      marketOffer({
+        id: "rw-lower-bid",
+        collectionId: "random-walk",
+        tokenId: 8,
+        kind: "buy",
+        priceEth: 1,
       }),
       marketOffer({
         id: "rw-bid",
@@ -42,17 +71,18 @@ describe("Home", () => {
         kind: "buy",
         priceEth: 2.25,
       }),
+      marketOffer({
+        id: "rw-inactive-high-bid",
+        collectionId: "random-walk",
+        tokenId: 10,
+        kind: "buy",
+        priceEth: 10,
+        active: false,
+      }),
     ];
     queryMocks.getMarketplaceOffers
       .mockResolvedValueOnce(randomWalkOffers)
       .mockResolvedValueOnce([]);
-    queryMocks.getMarketplaceStats.mockImplementation((offers: MarketOffer[]) => ({
-      totalOffers: offers.length,
-      sellListings: offers.filter((offer) => offer.kind === "sell").length,
-      buyOffers: offers.filter((offer) => offer.kind === "buy").length,
-      floorOffer: offers.find((offer) => offer.kind === "sell"),
-      topBidOffer: offers.find((offer) => offer.kind === "buy"),
-    }));
 
     render(await Home());
 
@@ -60,10 +90,9 @@ describe("Home", () => {
       "href",
       "/my-nfts",
     );
-    expect(screen.getByRole("link", { name: /^random walk$/i })).toHaveAttribute(
-      "href",
-      "/random-walk",
-    );
+    expect(
+      screen.getByRole("link", { name: /^random walk$/i }),
+    ).toHaveAttribute("href", "/random-walk");
     expect(
       screen.getByRole("link", { name: /^cosmic signature$/i }),
     ).toHaveAttribute("href", "/cosmic-signature");

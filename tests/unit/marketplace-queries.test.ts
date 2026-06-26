@@ -192,9 +192,28 @@ describe("marketplace queries", () => {
       maker: "0x0000000000000000000000000000000000000004",
       createdAt: "2026-01-04T00:00:00.000Z",
     } satisfies MarketOffer;
+    const inactiveLowListing = {
+      ...floorListing,
+      id: "inactive-low-listing",
+      priceEth: 0.01,
+      active: false,
+    } satisfies MarketOffer;
+    const inactiveHighBid = {
+      ...topBid,
+      id: "inactive-high-bid",
+      priceEth: 25,
+      active: false,
+    } satisfies MarketOffer;
 
     expect(
-      getMarketplaceStats([expensiveListing, cheapBid, floorListing, topBid]),
+      getMarketplaceStats([
+        expensiveListing,
+        cheapBid,
+        floorListing,
+        topBid,
+        inactiveLowListing,
+        inactiveHighBid,
+      ]),
     ).toEqual({
       totalOffers: 4,
       floorOffer: floorListing,
@@ -226,6 +245,12 @@ describe("marketplace queries", () => {
       offers: [
         baseOffers[0],
         {
+          ...baseOffers[0],
+          id: "inactive-floor",
+          priceEth: 0.01,
+          active: false,
+        },
+        {
           id: "bid",
           collectionId: "random-walk",
           tokenId: 1,
@@ -234,11 +259,22 @@ describe("marketplace queries", () => {
           maker: "0x0000000000000000000000000000000000000004",
           createdAt: "2026-01-04T00:00:00.000Z",
         },
+        {
+          id: "inactive-top-bid",
+          collectionId: "random-walk",
+          tokenId: 1,
+          kind: "buy",
+          priceEth: 50,
+          maker: "0x0000000000000000000000000000000000000005",
+          createdAt: "2026-01-05T00:00:00.000Z",
+          active: false,
+        },
       ],
     });
 
     expect(summary.activeSellOffer?.id).toBe("one");
     expect(summary.highestBid?.id).toBe("bid");
+    expect(summary.offers.map((offer) => offer.id)).toEqual(["one", "bid"]);
   });
 
   it("filters duplicate token IDs independently by offer type", () => {

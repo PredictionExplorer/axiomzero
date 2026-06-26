@@ -109,6 +109,72 @@ describe("Random Walk live data adapter", () => {
     );
   });
 
+  it("drops inactive detail offers before they reach pricing displays", () => {
+    const html = JSON.stringify({
+      nft: {
+        id: 1233,
+        owner: "0x47eF85Dfb775aCE0934fBa9EEd09D22e6eC0Cc08",
+        seed: "2993ea",
+      },
+      buyOffers: [
+        {
+          id: 1,
+          offerId: 1,
+          tokenId: 1233,
+          seller: "0x0000000000000000000000000000000000000000",
+          buyer: "0x0000000000000000000000000000000000000001",
+          price: 10,
+          active: false,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          createdAtTimestamp: 1,
+          kind: "buy",
+        },
+        {
+          id: 2,
+          offerId: 2,
+          tokenId: 1233,
+          seller: "0x0000000000000000000000000000000000000000",
+          buyer: "0x0000000000000000000000000000000000000002",
+          price: 2,
+          active: true,
+          createdAt: "2026-01-02T00:00:00.000Z",
+          createdAtTimestamp: 2,
+          kind: "buy",
+        },
+      ],
+      sellOffers: [
+        {
+          id: 3,
+          offerId: 3,
+          tokenId: 1233,
+          seller: "0x0000000000000000000000000000000000000003",
+          buyer: "0x0000000000000000000000000000000000000000",
+          price: 0.01,
+          active: false,
+          createdAt: "2026-01-03T00:00:00.000Z",
+          createdAtTimestamp: 3,
+          kind: "sell",
+        },
+        {
+          id: 4,
+          offerId: 4,
+          tokenId: 1233,
+          seller: "0x0000000000000000000000000000000000000004",
+          buyer: "0x0000000000000000000000000000000000000000",
+          price: 1.25,
+          active: true,
+          createdAt: "2026-01-04T00:00:00.000Z",
+          createdAtTimestamp: 4,
+          kind: "sell",
+        },
+      ],
+    });
+
+    expect(
+      parseRandomWalkDetailHtml(html).offers.map((offer) => offer.id),
+    ).toEqual(["sell-4", "buy-2"]);
+  });
+
   it("uses safe defaults when optional detail fields are missing", () => {
     const html = String.raw`
       self.__next_f.push([1,"{\"nft\":{\"id\":6,\"name\":\"\",\"owner\":\"not-an-address\",\"seed\":\"abc\"},\"message\":\"$undefined\"}"]);

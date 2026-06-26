@@ -4,6 +4,7 @@ import type {
   MarketToken,
   TokenHistoryRecord,
 } from "@/lib/marketplace/types";
+import { isDisplayableOffer } from "@/lib/marketplace/offers";
 import { formatEth, shortenAddress } from "@/lib/utils";
 
 export type TokenTheme = "black" | "white";
@@ -337,7 +338,7 @@ export function sortOffersForDisplay(
   kind: "buy" | "sell",
 ) {
   return offers
-    .filter((offer) => offer.kind === kind)
+    .filter((offer) => offer.kind === kind && isDisplayableOffer(offer))
     .sort((left, right) =>
       kind === "buy"
         ? right.priceEth - left.priceEth

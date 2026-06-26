@@ -5,6 +5,7 @@ import type {
   SortKey,
   TokenHistoryRecord,
 } from "@/lib/marketplace/types";
+import { isDisplayableOffer } from "@/lib/marketplace/offers";
 import { z } from "zod";
 
 const RANDOM_WALK_SITE_URL =
@@ -323,10 +324,9 @@ export function parseRandomWalkDetailHtml(html: string): {
       thumbUrl(tokenId),
     alt: `${formatRandomWalkName(tokenId)} artwork`,
   };
-  const offers = [
-    ...(payload.sellOffers ?? []),
-    ...(payload.buyOffers ?? []),
-  ].map((offer) => normalizeOffer(offer, artwork));
+  const offers = [...(payload.sellOffers ?? []), ...(payload.buyOffers ?? [])]
+    .map((offer) => normalizeOffer(offer, artwork))
+    .filter(isDisplayableOffer);
 
   return {
     token: {

@@ -122,8 +122,16 @@ describe("TokenPage", () => {
         rating: 9.25,
       }),
       offers: [
+        offer({
+          id: "inactive-sell",
+          kind: "sell",
+          priceEth: 0.01,
+          active: false,
+        }),
         offer({ id: "sell", kind: "sell", priceEth: 1.25 }),
-        offer({ id: "bid", kind: "buy", priceEth: 0.75 }),
+        offer({ id: "low-bid", kind: "buy", priceEth: 0.75 }),
+        offer({ id: "bid", kind: "buy", priceEth: 2 }),
+        offer({ id: "inactive-bid", kind: "buy", priceEth: 10, active: false }),
       ],
     });
     collectionIndexMocks.getCollectionTokenIds.mockResolvedValueOnce([
@@ -147,6 +155,8 @@ describe("TokenPage", () => {
     expect(
       screen.getByRole("heading", { name: /random walk #001233/i }),
     ).toBeVisible();
+    expect(screen.getByText("Listed at 1.25 ETH")).toBeVisible();
+    expect(screen.getByText("2.00 ETH")).toBeVisible();
     expect(
       screen.getByLabelText(/random walk #001233 triple video/i),
     ).toHaveAttribute("src", "/rw-white-triple.mp4");
