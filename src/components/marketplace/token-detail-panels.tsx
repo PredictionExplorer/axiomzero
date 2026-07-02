@@ -9,6 +9,8 @@ import { PriceSparkline } from "@/components/marketplace/price-sparkline";
 import { TokenActions } from "@/components/marketplace/token-actions";
 import { TokenShareActions } from "@/components/marketplace/token-share-actions";
 import { ButtonLink } from "@/components/ui/button";
+import { GlossaryTip } from "@/components/ui/tooltip";
+import type { GlossaryKey } from "@/lib/glossary";
 import {
   formatFullDate,
   formatHistoryRecords,
@@ -77,12 +79,14 @@ export function TokenMarketPanel({
           <dl className="mt-5 grid gap-3 sm:grid-cols-2">
             <MarketStat
               label="Best listing"
+              termKey="listing"
               value={
                 activeSellOffer ? formatEth(activeSellOffer.priceEth) : "None"
               }
             />
             <MarketStat
               label="Highest bid"
+              termKey="topBid"
               value={highestBid ? formatEth(highestBid.priceEth) : "No bids"}
             />
           </dl>
@@ -98,9 +102,14 @@ export function TokenMarketPanel({
 
       <section className="rounded-[2rem] border border-ivory/10 bg-ivory/[0.045]">
         <div className="border-b border-ivory/10 p-5">
-          <h2 className="text-xl font-semibold text-ivory">Order book</h2>
+          <h2 className="flex items-center gap-2 text-xl font-semibold text-ivory">
+            Order book
+            <GlossaryTip termKey="orderBook" align="start" />
+          </h2>
           <p className="mt-2 text-sm text-bone/70">
             Listings and bids sourced from the collection marketplace contract.
+            Anyone can buy an active listing instantly; bids stay open until
+            they are accepted on-chain or cancelled.
           </p>
         </div>
         <div className="grid gap-5 p-5 lg:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
@@ -129,12 +138,17 @@ export function TokenHistoryPanel({ token }: { token: MarketToken }) {
     <section className="rounded-[2rem] border border-ivory/10 bg-ivory/[0.045] p-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-sm uppercase tracking-[0.28em] text-copper">
+          <p className="flex items-center gap-2 text-sm uppercase tracking-[0.28em] text-copper">
             Provenance
+            <GlossaryTip termKey="provenance" align="start" />
           </p>
           <h2 className="font-display mt-3 text-2xl font-semibold text-ivory">
             Token history
           </h2>
+          <p className="mt-2 text-sm leading-6 text-bone/70">
+            Every recorded mint, transfer, and sale for this token, newest
+            first.
+          </p>
         </div>
         <p className="text-sm text-bone/70">
           {records.length.toLocaleString("en-US")} records
@@ -218,7 +232,11 @@ export function TokenCollectorNotesPanel({
         <dl className="mt-6 grid gap-3 sm:grid-cols-2">
           <MarketStat label="Owner" value={shortenAddress(token.owner, 6)} />
           <MarketStat label={primaryTrait.label} value={primaryTrait.value} />
-          <MarketStat label="Minted" value={formatFullDate(token.mintedAt)} />
+          <MarketStat
+            label="Minted"
+            value={formatFullDate(token.mintedAt)}
+            termKey="minted"
+          />
           <MarketStat
             label="Collection"
             value={collection.supplyNoun.singular}
@@ -262,8 +280,9 @@ export function TokenCollectorNotesPanel({
         )}
 
         <div className="mt-5 rounded-2xl bg-ink/55 p-4">
-          <p className="text-xs uppercase tracking-[0.2em] text-bone/60">
+          <p className="flex items-center gap-1.5 text-xs uppercase tracking-[0.2em] text-bone/60">
             Seed
+            <GlossaryTip termKey="seed" align="start" />
           </p>
           <p className="mt-2 break-all font-mono text-xs leading-6 text-bone/78">
             {token.seed || "Not available"}
@@ -282,11 +301,20 @@ export function TokenCollectorNotesPanel({
   );
 }
 
-function MarketStat({ label, value }: { label: string; value: string }) {
+function MarketStat({
+  label,
+  value,
+  termKey,
+}: {
+  label: string;
+  value: string;
+  termKey?: GlossaryKey;
+}) {
   return (
     <div className="rounded-[1.35rem] border border-ivory/10 bg-ink/40 p-4">
-      <dt className="text-xs uppercase tracking-[0.22em] text-bone/65">
+      <dt className="flex items-center gap-1.5 text-xs uppercase tracking-[0.22em] text-bone/65">
         {label}
+        {termKey ? <GlossaryTip termKey={termKey} align="start" /> : null}
       </dt>
       <dd className="mt-2 break-words font-semibold text-ivory">{value}</dd>
     </div>

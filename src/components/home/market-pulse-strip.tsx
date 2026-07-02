@@ -1,6 +1,8 @@
 import Link from "next/link";
 
 import { Reveal } from "@/components/ui/reveal";
+import { GlossaryTip } from "@/components/ui/tooltip";
+import type { GlossaryKey } from "@/lib/glossary";
 import type { HomeCollectionPulse } from "@/lib/marketplace/home-data";
 import { collectionPath, tokenPath } from "@/lib/marketplace/routes";
 import { formatCollectionSupplyLabel } from "@/lib/marketplace/collection-supply";
@@ -44,6 +46,7 @@ export function MarketPulseStrip({
                 <div className="mt-5 grid gap-3 sm:grid-cols-4">
                   <PulseStat
                     label="Floor"
+                    termKey="floorPrice"
                     value={
                       pulse.stats.floorOffer
                         ? formatEth(pulse.stats.floorOffer.priceEth)
@@ -60,6 +63,7 @@ export function MarketPulseStrip({
                   />
                   <PulseStat
                     label="Top bid"
+                    termKey="topBid"
                     value={
                       pulse.stats.topBidOffer
                         ? formatEth(pulse.stats.topBidOffer.priceEth)
@@ -76,10 +80,14 @@ export function MarketPulseStrip({
                   />
                   <PulseStat
                     label="Listings"
+                    termKey="listing"
+                    tooltipAlign="end"
                     value={String(pulse.stats.sellListings)}
                   />
                   <PulseStat
                     label="Bids"
+                    termKey="bid"
+                    tooltipAlign="end"
                     value={String(pulse.stats.buyOffers)}
                   />
                 </div>
@@ -96,36 +104,34 @@ function PulseStat({
   label,
   value,
   href,
+  termKey,
+  tooltipAlign = "start",
 }: {
   label: string;
   value: string;
   href?: string;
+  termKey: GlossaryKey;
+  tooltipAlign?: "start" | "end";
 }) {
-  const content = (
-    <>
-      <span className="block text-xs uppercase tracking-[0.2em] text-bone/65">
-        {label}
-      </span>
-      <span className="font-display mt-2 block text-xl font-semibold text-ivory">
-        {value}
-      </span>
-    </>
-  );
-
-  if (href) {
-    return (
-      <Link
-        href={href}
-        className="rounded-2xl border border-ivory/10 bg-ink/45 p-4 transition hover:border-copper/35"
-      >
-        {content}
-      </Link>
-    );
-  }
-
   return (
     <div className="rounded-2xl border border-ivory/10 bg-ink/45 p-4">
-      {content}
+      <span className="flex items-center gap-1.5 text-xs uppercase tracking-[0.2em] text-bone/65">
+        {label}
+        <GlossaryTip termKey={termKey} align={tooltipAlign} side="bottom" />
+      </span>
+      {href ? (
+        <Link
+          href={href}
+          aria-label={`${label} ${value} — view the token behind this price`}
+          className="font-display mt-2 block text-xl font-semibold text-ivory underline decoration-ivory/25 decoration-2 underline-offset-4 transition hover:text-copper focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-chartreuse"
+        >
+          {value}
+        </Link>
+      ) : (
+        <span className="font-display mt-2 block text-xl font-semibold text-ivory">
+          {value}
+        </span>
+      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 
 for (const path of [
   "/",
+  "/faq",
   "/random-walk",
   "/cosmic-signature",
   "/my-nfts",

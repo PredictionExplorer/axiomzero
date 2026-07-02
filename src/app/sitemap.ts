@@ -2,7 +2,12 @@ import type { MetadataRoute } from "next";
 
 import { collections } from "@/config/collections";
 import { getCollectionTokenIds } from "@/lib/marketplace/collection-index-live";
-import { collectionPath, MY_NFTS_PATH, tokenPath } from "@/lib/marketplace/routes";
+import {
+  collectionPath,
+  FAQ_PATH,
+  MY_NFTS_PATH,
+  tokenPath,
+} from "@/lib/marketplace/routes";
 import { SITE_URL } from "@/lib/seo/metadata";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
@@ -11,6 +16,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: SITE_URL, lastModified: now, changeFrequency: "daily", priority: 1 },
     {
       url: `${SITE_URL}${MY_NFTS_PATH}`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.7,
+    },
+    {
+      url: `${SITE_URL}${FAQ_PATH}`,
       lastModified: now,
       changeFrequency: "weekly",
       priority: 0.7,

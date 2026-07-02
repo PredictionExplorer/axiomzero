@@ -98,6 +98,37 @@ describe("home components", () => {
     expect(
       screen.getAllByRole("link", { name: /explore/i })[0],
     ).toHaveAttribute("href", "/random-walk");
+    expect(
+      screen.getByRole("link", { name: /floor 1\.50 eth/i }),
+    ).toHaveAttribute("href", "/token/random-walk/7");
+  });
+
+  it("explains market pulse jargon with glossary tooltips", () => {
+    const pulses: HomeCollectionPulse[] = [
+      {
+        collectionId: "random-walk",
+        shortName: "Random Walk",
+        supply: 4086,
+        stats: {
+          totalOffers: 0,
+          sellListings: 0,
+          buyOffers: 0,
+          floorOffer: undefined,
+          topBidOffer: undefined,
+        },
+      },
+    ];
+
+    render(<MarketPulseStrip pulses={pulses} />);
+
+    for (const name of [
+      /about floor price/i,
+      /about top bid/i,
+      /about listing/i,
+      /about bid$/i,
+    ]) {
+      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    }
   });
 
   it("renders the featured rail and hides it when empty", () => {

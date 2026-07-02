@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { collections } from "@/config/collections";
 import { MyNftsPanel } from "@/components/marketplace/my-nfts-panel";
 import { buildPageMetadata } from "@/lib/seo/metadata";
-import { MY_NFTS_PATH } from "@/lib/marketplace/routes";
+import { FAQ_PATH, MY_NFTS_PATH } from "@/lib/marketplace/routes";
 
 export const metadata: Metadata = buildPageMetadata({
   title: "My NFTs",
@@ -35,6 +36,16 @@ export default function MyNftsPage() {
           </p>
           <p className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-ivory">
             Your listings and bid alerts live here.
+          </p>
+          <p className="mt-3 text-sm leading-6 text-bone/78">
+            New to wallets, gas, or Arbitrum?{" "}
+            <Link
+              href={FAQ_PATH}
+              className="font-semibold text-copper transition hover:text-ember"
+            >
+              The FAQ explains setup and every trading step
+            </Link>
+            .
           </p>
         </div>
       </section>

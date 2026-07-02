@@ -19,6 +19,7 @@ describe("sitemap", () => {
     expect(entries.some((entry) => entry.url.endsWith("axiomzero.market"))).toBe(
       true,
     );
+    expect(entries.some((entry) => entry.url.endsWith("/faq"))).toBe(true);
     expect(entries.some((entry) => entry.url.includes("/random-walk"))).toBe(
       true,
     );

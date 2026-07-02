@@ -130,4 +130,32 @@ describe("Home", () => {
       screen.getByRole("heading", { name: /live works on the market/i }),
     ).toBeInTheDocument();
   });
+
+  it("guides newcomers with a how-it-works strip and a full FAQ link", async () => {
+    homeDataMocks.getHomeHeroArtworks.mockResolvedValue([]);
+    homeDataMocks.getHomeMarketOverview.mockResolvedValue({
+      pulses: [
+        pulse({ collectionId: "random-walk", shortName: "Random Walk" }),
+        pulse({
+          collectionId: "cosmic-signature",
+          shortName: "Cosmic Signature",
+        }),
+      ],
+      featured: [],
+    });
+
+    render(await Home());
+
+    expect(
+      screen.getByRole("heading", {
+        name: /three steps from browsing to owning/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /the faq walks through every step/i }),
+    ).toHaveAttribute("href", "/faq");
+    expect(
+      screen.getByRole("link", { name: /read the full faq/i }),
+    ).toHaveAttribute("href", "/faq");
+  });
 });

@@ -8,7 +8,7 @@ vi.mock("@/components/wallet/connect-wallet-button", () => ({
 import { SiteHeader } from "@/components/layout/site-header";
 
 describe("SiteHeader", () => {
-  it("shows the three public destination links, mobile nav, and wallet action", () => {
+  it("shows the four public destination links, mobile nav, and wallet action", () => {
     render(<SiteHeader />);
 
     expect(
@@ -22,6 +22,10 @@ describe("SiteHeader", () => {
     expect(screen.getAllByRole("link", { name: /cosmic signature/i })[0]).toHaveAttribute(
       "href",
       "/cosmic-signature",
+    );
+    expect(screen.getAllByRole("link", { name: /^faq$/i })[0]).toHaveAttribute(
+      "href",
+      "/faq",
     );
     expect(
       screen.getByRole("button", { name: /open navigation/i }),

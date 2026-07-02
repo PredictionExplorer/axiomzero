@@ -10,6 +10,8 @@ import {
 } from "@/components/marketplace/token-detail-panels";
 import { TokenMediaViewer } from "@/components/marketplace/token-media-viewer";
 import { JsonLd } from "@/components/seo/json-ld";
+import { GlossaryTip } from "@/components/ui/tooltip";
+import type { GlossaryKey } from "@/lib/glossary";
 import type { CollectionId } from "@/lib/marketplace/types";
 import {
   getToken,
@@ -237,14 +239,21 @@ export default async function TokenPage({
               {formatTokenId(token.tokenId)}
             </span>
             {token.rating !== undefined ? (
-              <span className="rounded-full border border-olive/30 bg-olive/15 px-3 py-1 text-sm font-semibold text-chartreuse">
-                Beauty {token.rating.toFixed(2)}
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-olive/30 bg-olive/15 px-3 py-1 text-sm font-semibold text-chartreuse">
+                <span>Beauty {token.rating.toFixed(2)}</span>
+                <GlossaryTip termKey="beautyScore" align="start" />
               </span>
             ) : null}
-            <span className="rounded-full border border-chartreuse/20 bg-chartreuse/10 px-3 py-1 text-sm font-semibold text-chartreuse">
-              {activeSellOffer
-                ? `Listed at ${formatEth(activeSellOffer.priceEth)}`
-                : "Unlisted"}
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-chartreuse/20 bg-chartreuse/10 px-3 py-1 text-sm font-semibold text-chartreuse">
+              <span>
+                {activeSellOffer
+                  ? `Listed at ${formatEth(activeSellOffer.priceEth)}`
+                  : "Unlisted"}
+              </span>
+              <GlossaryTip
+                termKey={activeSellOffer ? "listing" : "unlisted"}
+                align="start"
+              />
             </span>
           </div>
           <h1 className="font-display mt-5 text-5xl font-semibold tracking-[-0.06em] text-ivory sm:text-7xl">
@@ -257,16 +266,22 @@ export default async function TokenPage({
           <dl className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <HeroStat label="Owner" value={shortenAddress(token.owner, 6)} />
             <HeroStat label={snapshotTrait.label} value={snapshotTrait.value} />
-            <HeroStat label="Minted" value={formatFullDate(token.mintedAt)} />
+            <HeroStat
+              label="Minted"
+              value={formatFullDate(token.mintedAt)}
+              termKey="minted"
+            />
             <HeroStat
               label="Highest bid"
               value={highestBid ? formatEth(highestBid.priceEth) : "No bids"}
+              termKey="topBid"
             />
           </dl>
 
           <div className="mt-8 rounded-[2rem] border border-ivory/10 bg-ink/40 p-5">
-            <p className="text-xs uppercase tracking-[0.22em] text-bone/65">
+            <p className="flex items-center gap-1.5 text-xs uppercase tracking-[0.22em] text-bone/65">
               Seed
+              <GlossaryTip termKey="seed" align="start" />
             </p>
             <p className="mt-3 break-all font-mono text-xs leading-6 text-bone/78">
               {token.seed || "Not available"}
@@ -301,11 +316,20 @@ export default async function TokenPage({
   );
 }
 
-function HeroStat({ label, value }: { label: string; value: string }) {
+function HeroStat({
+  label,
+  value,
+  termKey,
+}: {
+  label: string;
+  value: string;
+  termKey?: GlossaryKey;
+}) {
   return (
     <div className="rounded-[1.5rem] border border-ivory/10 bg-ink/45 p-4">
-      <dt className="text-xs uppercase tracking-[0.22em] text-bone/65">
+      <dt className="flex items-center gap-1.5 text-xs uppercase tracking-[0.22em] text-bone/65">
         {label}
+        {termKey ? <GlossaryTip termKey={termKey} align="start" /> : null}
       </dt>
       <dd className="mt-2 break-words font-semibold text-ivory">{value}</dd>
     </div>

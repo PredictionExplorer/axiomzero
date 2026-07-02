@@ -56,6 +56,54 @@ test("collection market preserves filters from the URL", async ({ page }) => {
   await expect(page).toHaveURL(/filter=buy/);
 });
 
+test("faq page answers questions via accordions and glossary", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  // The desktop pill nav is hidden on small viewports, where the FAQ link
+  // lives in the hamburger menu instead.
+  const desktopFaqLink = page
+    .getByRole("navigation", { name: /primary/i })
+    .getByRole("link", { name: /^faq$/i });
+
+  if (await desktopFaqLink.isVisible()) {
+    await desktopFaqLink.click();
+  } else {
+    await page.getByRole("button", { name: /open navigation/i }).click();
+    await page
+      .locator("#mobile-nav")
+      .getByRole("link", { name: /^faq$/i })
+      .click();
+  }
+
+  await expect(page).toHaveURL(/\/faq/);
+  await expect(
+    page.getByRole("heading", { name: /frequently asked questions/i }),
+  ).toBeVisible();
+
+  const question = page.getByText("What is marketplace approval?");
+  const answer = page.getByText(/standard erc-721 permission/i);
+  await expect(answer).toBeHidden();
+  await question.click();
+  await expect(answer).toBeVisible();
+
+  await expect(
+    page.getByRole("heading", { name: /marketplace glossary/i }),
+  ).toBeVisible();
+});
+
+test("token page tooltips reveal glossary definitions", async ({ page }) => {
+  await page.goto("/token/random-walk/1233");
+
+  const trigger = page.getByRole("button", { name: /about seed/i }).first();
+  await expect(trigger).toBeVisible();
+  await trigger.hover();
+  await expect(
+    page.getByText(/deterministically generates this artwork/i).first(),
+  ).toBeVisible();
+});
+
 test("owned NFT workspace prompts for a connected wallet", async ({ page }) => {
   await page.goto("/my-nfts");
 

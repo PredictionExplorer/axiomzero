@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { ConnectWalletButton } from "@/components/wallet/connect-wallet-button";
 import { Button } from "@/components/ui/button";
 import { TokenCardSkeleton } from "@/components/ui/skeleton";
+import { InfoTip } from "@/components/ui/tooltip";
 import type {
   Collection,
   MarketOffer,
@@ -510,7 +511,9 @@ export function MyNftsPanel({
           <p className="mt-3 max-w-3xl text-sm leading-6 text-bone/78">
             This in-app panel scans your connected wallet, highlights active
             bids on tokens you own, and lets you list without leaving the
-            marketplace.
+            marketplace. Your first listing in each collection asks for a
+            one-time marketplace approval so the verified contract can settle
+            the sale.
           </p>
         </div>
 
@@ -544,13 +547,25 @@ export function MyNftsPanel({
           </p>
         </div>
         <div className="rounded-2xl bg-ink/48 p-4">
-          <p className="text-sm text-bone/75">Bid alerts</p>
+          <p className="flex items-center gap-1.5 text-sm text-bone/75">
+            Bid alerts
+            <InfoTip label="About bid alerts" align="start">
+              Owned NFTs that currently have active bids from collectors. Open
+              the token page to review the full order book.
+            </InfoTip>
+          </p>
           <p className="font-display mt-1 text-2xl font-semibold text-chartreuse">
             {alertCount}
           </p>
         </div>
         <div className="rounded-2xl bg-ink/48 p-4">
-          <p className="text-sm text-bone/75">Listed value</p>
+          <p className="flex items-center gap-1.5 text-sm text-bone/75">
+            Listed value
+            <InfoTip label="About listed value" align="start">
+              The combined ETH price of your active sale listings across both
+              collections.
+            </InfoTip>
+          </p>
           <p className="font-display mt-1 text-2xl font-semibold text-ivory">
             {listedValueEth > 0 ? formatEth(listedValueEth) : "—"}
           </p>

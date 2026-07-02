@@ -11,17 +11,17 @@ const views = [
   {
     id: "discover",
     label: "Discover",
-    description: "Browse curated pages",
+    description: "Browse every minted token in the collection",
   },
   {
     id: "listings",
     label: "Listings",
-    description: "NFTs available to buy",
+    description: "NFTs you can buy right now, cheapest first",
   },
   {
     id: "top-bids",
     label: "Top bids",
-    description: "Highest bids first",
+    description: "Standing buy offers, highest first",
   },
 ] as const;
 
@@ -162,6 +162,11 @@ export function MarketplaceControls({
         </div>
       </div>
 
+      <p className="text-xs leading-5 text-bone/60">
+        Min and Max filter by the ETH price of active listings and bids. Leave
+        them empty to see everything.
+      </p>
+
       {activeView === "discover" ? (
         <label className="inline-flex items-center gap-3 rounded-2xl border border-ivory/10 bg-ink/45 px-4 py-3 text-sm text-bone/78">
           <input
@@ -171,7 +176,12 @@ export function MarketplaceControls({
             defaultChecked={search.listedOnly}
             className="size-4 rounded border-ivory/20 bg-ink accent-copper"
           />
-          Show listed tokens only
+          <span>
+            Show listed tokens only
+            <span className="block text-xs text-bone/60">
+              Hides tokens without an active sale listing.
+            </span>
+          </span>
         </label>
       ) : null}
     </form>

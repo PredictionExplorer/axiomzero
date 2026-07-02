@@ -1,10 +1,10 @@
 import { collections } from "@/config/collections";
 import {
   BRAND_DESCRIPTION,
-  BRAND_FAQ,
   BRAND_NAME,
   BRAND_TAGLINE,
 } from "@/lib/brand";
+import { ALL_FAQ_ITEMS, type FaqItem } from "@/lib/faq";
 import { absoluteUrl } from "@/lib/seo/metadata";
 
 type JsonLd = Record<string, unknown>;
@@ -125,11 +125,13 @@ export function tokenArtworkJsonLd({
   return artwork;
 }
 
-export function faqPageJsonLd(): JsonLd {
+export function faqPageJsonLd(
+  items: readonly FaqItem[] = ALL_FAQ_ITEMS,
+): JsonLd {
   return {
     "@context": "https://schema.org",
     "@type": "FAQPage",
-    mainEntity: BRAND_FAQ.map((item) => ({
+    mainEntity: items.map((item) => ({
       "@type": "Question",
       name: item.question,
       acceptedAnswer: {

@@ -2,7 +2,11 @@ import Link from "next/link";
 
 import { collections } from "@/config/collections";
 import { BRAND_NAME, BRAND_PRINCIPLES, FOUNDATION_STATEMENT } from "@/lib/brand";
-import { collectionPath, MY_NFTS_PATH } from "@/lib/marketplace/routes";
+import {
+  collectionPath,
+  FAQ_PATH,
+  MY_NFTS_PATH,
+} from "@/lib/marketplace/routes";
 import { shortenAddress } from "@/lib/utils";
 
 const footerLinks = [
@@ -12,6 +16,7 @@ const footerLinks = [
     href: collectionPath(collection.id),
     label: collection.shortName,
   })),
+  { href: FAQ_PATH, label: "FAQ" },
 ];
 
 export function SiteFooter() {

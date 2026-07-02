@@ -7,8 +7,8 @@ import { ArtSystemsSection } from "@/components/home/art-systems-section";
 import { FeaturedArtworksRail } from "@/components/home/featured-artworks-rail";
 import { HomeFaqSection } from "@/components/home/home-faq-section";
 import { HomeHero } from "@/components/home/home-hero";
+import { HowItWorksSection } from "@/components/home/how-it-works-section";
 import { MarketPulseStrip } from "@/components/home/market-pulse-strip";
-import { JsonLd } from "@/components/seo/json-ld";
 import { ButtonLink } from "@/components/ui/button";
 import { Reveal } from "@/components/ui/reveal";
 import {
@@ -29,7 +29,6 @@ import {
   tokenPath,
 } from "@/lib/marketplace/routes";
 import type { Collection, MarketOffer } from "@/lib/marketplace/types";
-import { faqPageJsonLd } from "@/lib/seo/json-ld";
 import { buildPageMetadata } from "@/lib/seo/metadata";
 import { formatEth, formatTokenId } from "@/lib/utils";
 
@@ -143,9 +142,9 @@ export default async function Home() {
 
   return (
     <div className="overflow-hidden">
-      <JsonLd data={faqPageJsonLd()} />
       <HomeHero artworks={heroArtworks} />
       <MarketPulseStrip pulses={overview.pulses} />
+      <HowItWorksSection />
 
       <section
         id="collections"

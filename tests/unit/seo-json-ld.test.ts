@@ -41,4 +41,20 @@ describe("seo json-ld", () => {
 
     expect((faqPageJsonLd() as { mainEntity: unknown[] }).mainEntity.length).toBeGreaterThan(0);
   });
+
+  it("builds faq schema from a custom item subset", () => {
+    const schema = faqPageJsonLd([
+      { question: "What is a seed?", answer: "The generative input." },
+    ]) as {
+      "@type": string;
+      mainEntity: Array<{ name: string; acceptedAnswer: { text: string } }>;
+    };
+
+    expect(schema["@type"]).toBe("FAQPage");
+    expect(schema.mainEntity).toHaveLength(1);
+    expect(schema.mainEntity[0]).toMatchObject({
+      name: "What is a seed?",
+      acceptedAnswer: { text: "The generative input." },
+    });
+  });
 });

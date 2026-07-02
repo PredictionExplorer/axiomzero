@@ -32,12 +32,16 @@ export function MarketplaceTokenCard({
         </div>
         {item.token.rating !== undefined ? (
           <div className="absolute right-4 top-4 rounded-full border border-olive/30 bg-olive/15 px-3 py-1 text-xs font-semibold text-chartreuse backdrop-blur">
-            Beauty {item.token.rating.toFixed(1)}
+            <span>Beauty {item.token.rating.toFixed(1)}</span>
+            <span className="sr-only">
+              , the aesthetic score from collection metadata
+            </span>
           </div>
         ) : null}
         {item.highestBid ? (
           <div className="absolute bottom-4 left-4 rounded-full border border-chartreuse/25 bg-chartreuse/12 px-3 py-1 text-xs font-semibold text-chartreuse backdrop-blur">
-            Bid {formatEth(item.highestBid.priceEth)}
+            <span>Bid {formatEth(item.highestBid.priceEth)}</span>
+            <span className="sr-only">, the highest active bid</span>
           </div>
         ) : null}
       </div>

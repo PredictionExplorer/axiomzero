@@ -6,6 +6,8 @@ import type {
 
 export const MY_NFTS_PATH = "/my-nfts";
 
+export const FAQ_PATH = "/faq";
+
 export const collectionPaths = {
   "random-walk": "/random-walk",
   "cosmic-signature": "/cosmic-signature",

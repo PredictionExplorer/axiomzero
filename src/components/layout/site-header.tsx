@@ -6,13 +6,18 @@ import { Menu, X } from "lucide-react";
 
 import { ConnectWalletButton } from "@/components/wallet/connect-wallet-button";
 import { BRAND_NAME } from "@/lib/brand";
-import { collectionPath, MY_NFTS_PATH } from "@/lib/marketplace/routes";
+import {
+  collectionPath,
+  FAQ_PATH,
+  MY_NFTS_PATH,
+} from "@/lib/marketplace/routes";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: MY_NFTS_PATH, label: "My NFTs" },
   { href: collectionPath("random-walk"), label: "Random Walk" },
   { href: collectionPath("cosmic-signature"), label: "Cosmic Signature" },
+  { href: FAQ_PATH, label: "FAQ" },
 ];
 
 export function SiteHeader() {

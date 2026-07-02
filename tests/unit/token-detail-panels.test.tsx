@@ -95,6 +95,37 @@ describe("token detail panels", () => {
     expect(screen.getByText("Mock trading controls")).toBeInTheDocument();
   });
 
+  it("explains market jargon with glossary tooltips", () => {
+    render(
+      <TokenMarketPanel
+        collection={requireCollection("random-walk")}
+        token={token()}
+        activeSellOffer={undefined}
+        highestBid={undefined}
+        offers={[]}
+        usdPerEth={undefined}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /about listing/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /about top bid/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /about order book/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("explains provenance with a glossary tooltip", () => {
+    render(<TokenHistoryPanel token={token()} />);
+
+    expect(
+      screen.getByRole("button", { name: /about provenance/i }),
+    ).toBeInTheDocument();
+  });
+
   it("shows unlisted state without usd line", () => {
     render(
       <TokenMarketPanel
