@@ -15,6 +15,7 @@ import { toast } from "sonner";
 
 import { ConnectWalletButton } from "@/components/wallet/connect-wallet-button";
 import { Button } from "@/components/ui/button";
+import { TokenCardSkeleton } from "@/components/ui/skeleton";
 import type {
   Collection,
   MarketOffer,
@@ -289,6 +290,14 @@ export function MyNftsPanel({
     () => ownedItems.filter((item) => item.highestBid).length,
     [ownedItems],
   );
+  const listedValueEth = useMemo(
+    () =>
+      ownedItems.reduce(
+        (sum, item) => sum + (item.activeSellOffer?.priceEth ?? 0),
+        0,
+      ),
+    [ownedItems],
+  );
 
   const scanWallet = useCallback(async () => {
     if (!address || !publicClient) {
@@ -527,17 +536,23 @@ export function MyNftsPanel({
         </div>
       </div>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl bg-ink/48 p-4">
           <p className="text-sm text-bone/75">Owned NFTs</p>
-          <p className="mt-1 text-2xl font-semibold text-ivory">
+          <p className="font-display mt-1 text-2xl font-semibold text-ivory">
             {ownedItems.length}
           </p>
         </div>
         <div className="rounded-2xl bg-ink/48 p-4">
           <p className="text-sm text-bone/75">Bid alerts</p>
-          <p className="mt-1 text-2xl font-semibold text-chartreuse">
+          <p className="font-display mt-1 text-2xl font-semibold text-chartreuse">
             {alertCount}
+          </p>
+        </div>
+        <div className="rounded-2xl bg-ink/48 p-4">
+          <p className="text-sm text-bone/75">Listed value</p>
+          <p className="font-display mt-1 text-2xl font-semibold text-ivory">
+            {listedValueEth > 0 ? formatEth(listedValueEth) : "—"}
           </p>
         </div>
         <div className="rounded-2xl bg-ink/48 p-4">
@@ -565,7 +580,11 @@ export function MyNftsPanel({
       ) : null}
 
       <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-        {ownedItems.map((item) => {
+        {isScanning
+          ? Array.from({ length: 3 }, (_, index) => (
+              <TokenCardSkeleton key={`skeleton-${index}`} />
+            ))
+          : ownedItems.map((item) => {
           const key = tokenKey(item.token.collectionId, item.token.tokenId);
 
           return (
@@ -665,14 +684,38 @@ export function MyNftsPanel({
       </div>
 
       {isConnected && !isScanning && !ownedItems.length ? (
-        <div className="mt-6 rounded-[2rem] border border-ivory/10 bg-ink/38 p-8 text-center">
-          <h3 className="text-2xl font-semibold text-ivory">
-            No owned NFTs found
-          </h3>
-          <p className="mt-3 text-bone/75">
-            Try refreshing after switching wallets, or open a token directly if
-            it sits outside the configured scan range.
-          </p>
+        <div className="relative mt-6 overflow-hidden rounded-[2rem] border border-ivory/10 bg-ink/38 p-10 text-center">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 opacity-40"
+          >
+            <div className="absolute left-1/2 top-1/2 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full border border-copper/30" />
+            <div className="absolute left-1/2 top-1/2 h-48 w-48 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-full border border-chartreuse/20" />
+          </div>
+          <div className="relative">
+            <h3 className="font-display text-2xl font-semibold text-ivory">
+              No owned NFTs found
+            </h3>
+            <p className="mx-auto mt-3 max-w-xl text-bone/75">
+              Try refreshing after switching wallets, or open a token directly
+              if it sits outside the configured scan range. Browse the
+              collections to start building your gallery.
+            </p>
+            <div className="mt-6 flex flex-wrap justify-center gap-3">
+              <a
+                href="/random-walk"
+                className="inline-flex h-11 items-center justify-center rounded-full bg-copper px-5 text-sm font-semibold text-ink transition hover:bg-ember"
+              >
+                Browse Random Walk
+              </a>
+              <a
+                href="/cosmic-signature"
+                className="inline-flex h-11 items-center justify-center rounded-full border border-ivory/15 bg-ivory/[0.04] px-5 text-sm font-semibold text-ivory transition hover:bg-ivory/[0.09]"
+              >
+                Browse Cosmic Signature
+              </a>
+            </div>
+          </div>
         </div>
       ) : null}
     </section>

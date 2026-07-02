@@ -2,15 +2,25 @@
 
 import { useState } from "react";
 
-import { Button } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 
 type ShareLink = {
   label: string;
   value: string;
 };
 
-export function TokenShareActions({ links }: { links: ShareLink[] }) {
+export function TokenShareActions({
+  links,
+  detailHref,
+  title,
+}: {
+  links: ShareLink[];
+  detailHref: string;
+  title: string;
+}) {
   const [status, setStatus] = useState<string>();
+  const encodedUrl = encodeURIComponent(detailHref);
+  const encodedTitle = encodeURIComponent(title);
 
   async function copyLink(link: ShareLink) {
     if (!navigator.clipboard) {
@@ -35,6 +45,22 @@ export function TokenShareActions({ links }: { links: ShareLink[] }) {
             Copy {link.label}
           </Button>
         ))}
+        <ButtonLink
+          href={`https://twitter.com/intent/tweet?text=${encodedTitle}&url=${encodedUrl}`}
+          target="_blank"
+          rel="noreferrer"
+          variant="outline"
+        >
+          Share on X
+        </ButtonLink>
+        <ButtonLink
+          href={`https://warpcast.com/~/compose?text=${encodedTitle}%20${encodedUrl}`}
+          target="_blank"
+          rel="noreferrer"
+          variant="outline"
+        >
+          Share on Warpcast
+        </ButtonLink>
       </div>
       <p className="min-h-5 text-sm text-bone/70" aria-live="polite">
         {status}

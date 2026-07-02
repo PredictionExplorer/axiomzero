@@ -5,6 +5,7 @@ import type {
   MarketOffer,
   MarketToken,
 } from "@/lib/marketplace/types";
+import { PriceSparkline } from "@/components/marketplace/price-sparkline";
 import { TokenActions } from "@/components/marketplace/token-actions";
 import { TokenShareActions } from "@/components/marketplace/token-share-actions";
 import { ButtonLink } from "@/components/ui/button";
@@ -15,7 +16,29 @@ import {
   sortOffersForDisplay,
   visibleTokenTraits,
 } from "@/lib/marketplace/token-detail";
+import { formatEthWithUsd } from "@/lib/pricing/eth-usd";
 import { formatDate, formatEth, shortenAddress } from "@/lib/utils";
+
+function PriceLabel({
+  eth,
+  usdPerEth,
+  className = "text-ivory",
+}: {
+  eth: number;
+  usdPerEth?: number;
+  className?: string;
+}) {
+  const usd = formatEthWithUsd(eth, usdPerEth);
+
+  return (
+    <div>
+      <p className={`font-display text-3xl font-semibold tracking-[-0.04em] ${className}`}>
+        {formatEth(eth)}
+      </p>
+      {usd ? <p className="mt-1 text-sm text-bone/70">≈ {usd}</p> : null}
+    </div>
+  );
+}
 
 export function TokenMarketPanel({
   collection,
@@ -23,12 +46,14 @@ export function TokenMarketPanel({
   activeSellOffer,
   highestBid,
   offers,
+  usdPerEth,
 }: {
   collection: Collection;
   token: MarketToken;
   activeSellOffer?: MarketOffer;
   highestBid?: MarketOffer;
   offers: MarketOffer[];
+  usdPerEth?: number;
 }) {
   const sellOffers = sortOffersForDisplay(offers, "sell");
   const buyOffers = sortOffersForDisplay(offers, "buy");
@@ -40,9 +65,15 @@ export function TokenMarketPanel({
           <p className="text-sm uppercase tracking-[0.28em] text-copper">
             Live market
           </p>
-          <h2 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-ivory">
-            {activeSellOffer ? formatEth(activeSellOffer.priceEth) : "Unlisted"}
-          </h2>
+          <div className="mt-3">
+            {activeSellOffer ? (
+              <PriceLabel eth={activeSellOffer.priceEth} usdPerEth={usdPerEth} />
+            ) : (
+              <h2 className="font-display text-3xl font-semibold tracking-[-0.04em] text-ivory">
+                Unlisted
+              </h2>
+            )}
+          </div>
           <dl className="mt-5 grid gap-3 sm:grid-cols-2">
             <MarketStat
               label="Best listing"
@@ -101,7 +132,7 @@ export function TokenHistoryPanel({ token }: { token: MarketToken }) {
           <p className="text-sm uppercase tracking-[0.28em] text-copper">
             Provenance
           </p>
-          <h2 className="mt-3 text-2xl font-semibold text-ivory">
+          <h2 className="font-display mt-3 text-2xl font-semibold text-ivory">
             Token history
           </h2>
         </div>
@@ -110,24 +141,33 @@ export function TokenHistoryPanel({ token }: { token: MarketToken }) {
         </p>
       </div>
 
+      <PriceSparkline records={records} />
+
       {records.length ? (
-        <div className="mt-6 space-y-3">
-          {records.map((record) => (
-            <article
-              key={record.key}
-              className="grid gap-3 rounded-2xl bg-ink/55 p-4 text-sm sm:grid-cols-[1fr_auto]"
-            >
-              <div>
-                <h3 className="font-semibold text-ivory">
-                  {record.title}
-                  {record.price ? ` · ${record.price}` : ""}
-                </h3>
-                <p className="mt-1 text-bone/70">{record.subtitle}</p>
-              </div>
-              <p className="text-bone/75">{record.date}</p>
-            </article>
+        <ol className="relative mt-8 space-y-0 border-l border-ivory/15 pl-6">
+          {records.map((record, index) => (
+            <li key={record.key} className="relative pb-6 last:pb-0">
+              <span className="absolute -left-[0.42rem] top-1 size-3 rounded-full border border-copper bg-copper" />
+              <article className="rounded-2xl bg-ink/55 p-4 text-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-semibold text-ivory">
+                      {record.title}
+                      {record.price ? ` · ${record.price}` : ""}
+                    </h3>
+                    <p className="mt-1 text-bone/70">{record.subtitle}</p>
+                  </div>
+                  <p className="text-bone/75">{record.date}</p>
+                </div>
+                {index === 0 ? (
+                  <p className="mt-2 text-xs uppercase tracking-[0.2em] text-chartreuse">
+                    Latest event
+                  </p>
+                ) : null}
+              </article>
+            </li>
           ))}
-        </div>
+        </ol>
       ) : (
         <EmptyState>
           No public transfer history is available from this collection endpoint
@@ -231,7 +271,11 @@ export function TokenCollectorNotesPanel({
         </div>
 
         <div className="mt-5">
-          <TokenShareActions links={shareLinks} />
+          <TokenShareActions
+            links={shareLinks}
+            detailHref={detailHref}
+            title={token.name}
+          />
         </div>
       </section>
     </div>

@@ -40,5 +40,17 @@ describe("marketplace route helpers", () => {
         view: "top-bids",
       }),
     ).toBe("/random-walk?view=top-bids&filter=buy&sort=price-desc");
+
+    expect(
+      collectionMarketHref({
+        collectionId: "random-walk",
+        search: {
+          collection: "random-walk",
+          view: "discover",
+          listedOnly: true,
+          pageSize: 24,
+        },
+      }),
+    ).toBe("/random-walk?view=discover&pageSize=24&listedOnly=1");
   });
 });

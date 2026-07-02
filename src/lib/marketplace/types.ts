@@ -92,6 +92,7 @@ export type MarketplaceSearchParams = {
   sort?: SortKey;
   page?: number;
   pageSize?: number;
+  listedOnly?: boolean;
 };
 
 export type MarketplaceStats = {

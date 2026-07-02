@@ -83,6 +83,7 @@ describe("marketplace queries", () => {
       query: undefined,
       page: 3,
       pageSize: 18,
+      listedOnly: false,
     });
 
     expect(
@@ -101,6 +102,16 @@ describe("marketplace queries", () => {
       min: undefined,
       page: 1,
       pageSize: 12,
+    });
+  });
+
+  it("parses listed-only discover filters", () => {
+    expect(
+      parseMarketplaceSearchParams({
+        listedOnly: "1",
+      }),
+    ).toMatchObject({
+      listedOnly: true,
     });
   });
 
@@ -397,6 +408,111 @@ describe("marketplace queries", () => {
     });
     expect(page.items.map((item) => item.token.tokenId)).toEqual([5, 7]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("filters discover pages by listing status and price", async () => {
+    indexMocks.getCollectionTokenIds.mockResolvedValue([5, 7]);
+    contractMocks.fetchCollectionContractOffers.mockResolvedValue([
+      {
+        id: "sell-5",
+        collectionId: "random-walk",
+        tokenId: 5,
+        kind: "sell",
+        priceEth: 0.5,
+        maker: "0x0000000000000000000000000000000000000001",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "sell-7",
+        collectionId: "random-walk",
+        tokenId: 7,
+        kind: "sell",
+        priceEth: 2,
+        maker: "0x0000000000000000000000000000000000000002",
+        createdAt: "2026-01-02T00:00:00.000Z",
+      },
+    ]);
+    contractMocks.fetchContractOffersForTokenId.mockResolvedValue([
+      {
+        id: "sell-5",
+        collectionId: "random-walk",
+        tokenId: 5,
+        kind: "sell",
+        priceEth: 0.5,
+        maker: "0x0000000000000000000000000000000000000001",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+    ]);
+    const detailHtml = (tokenId: number) => String.raw`
+      self.__next_f.push([1,"{\"nft\":{\"id\":${tokenId},\"owner\":\"0x0000000000000000000000000000000000000001\",\"seed\":\"seed-${tokenId}\"},\"buyOffers\":[],\"sellOffers\":[]}"]);
+    `;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const tokenId = Number(String(input).split("/").pop());
+        return new Response(detailHtml(tokenId));
+      }),
+    );
+
+    const page = await getMarketplaceTokenPage({
+      collection: "random-walk",
+      view: "discover",
+      listedOnly: true,
+      min: 0.4,
+      max: 0.6,
+      sort: "price-asc",
+      page: 1,
+      pageSize: 12,
+    });
+
+    expect(page.totalItems).toBe(1);
+    expect(page.items[0]?.token.tokenId).toBe(5);
+  });
+
+  it("sorts discover pages by listing price descending", async () => {
+    indexMocks.getCollectionTokenIds.mockResolvedValue([5, 7]);
+    contractMocks.fetchCollectionContractOffers.mockResolvedValue([
+      {
+        id: "sell-5",
+        collectionId: "random-walk",
+        tokenId: 5,
+        kind: "sell",
+        priceEth: 0.5,
+        maker: "0x0000000000000000000000000000000000000001",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "sell-7",
+        collectionId: "random-walk",
+        tokenId: 7,
+        kind: "sell",
+        priceEth: 2,
+        maker: "0x0000000000000000000000000000000000000002",
+        createdAt: "2026-01-02T00:00:00.000Z",
+      },
+    ]);
+    contractMocks.fetchContractOffersForTokenId.mockResolvedValue([]);
+    const detailHtml = (tokenId: number) => String.raw`
+      self.__next_f.push([1,"{\"nft\":{\"id\":${tokenId},\"owner\":\"0x0000000000000000000000000000000000000001\",\"seed\":\"seed-${tokenId}\"},\"buyOffers\":[],\"sellOffers\":[]}"]);
+    `;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const tokenId = Number(String(input).split("/").pop());
+        return new Response(detailHtml(tokenId));
+      }),
+    );
+
+    const page = await getMarketplaceTokenPage({
+      collection: "random-walk",
+      view: "discover",
+      listedOnly: true,
+      sort: "price-desc",
+      page: 1,
+      pageSize: 12,
+    });
+
+    expect(page.items.map((item) => item.token.tokenId)).toEqual([7, 5]);
   });
 
   it("falls back to Random Walk metadata and contract orders when detail loading fails", async () => {

@@ -8,20 +8,24 @@ vi.mock("@/components/wallet/connect-wallet-button", () => ({
 import { SiteHeader } from "@/components/layout/site-header";
 
 describe("SiteHeader", () => {
-  it("shows the three public destination links and the wallet action", () => {
+  it("shows the three public destination links, mobile nav, and wallet action", () => {
     render(<SiteHeader />);
 
-    expect(screen.getByRole("link", { name: /my nfts/i })).toHaveAttribute(
-      "href",
-      "/my-nfts",
-    );
-    expect(screen.getByRole("link", { name: /random walk/i })).toHaveAttribute(
+    expect(
+      screen.getByRole("navigation", { name: /primary/i }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /my nfts/i })).toHaveLength(2);
+    expect(screen.getAllByRole("link", { name: /random walk/i })[0]).toHaveAttribute(
       "href",
       "/random-walk",
     );
+    expect(screen.getAllByRole("link", { name: /cosmic signature/i })[0]).toHaveAttribute(
+      "href",
+      "/cosmic-signature",
+    );
     expect(
-      screen.getByRole("link", { name: /cosmic signature/i }),
-    ).toHaveAttribute("href", "/cosmic-signature");
+      screen.getByRole("button", { name: /open navigation/i }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /connect wallet/i }),
     ).toBeInTheDocument();

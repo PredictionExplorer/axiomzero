@@ -11,7 +11,7 @@ const views = [
   {
     id: "discover",
     label: "Discover",
-    description: "Browse small curated pages",
+    description: "Browse curated pages",
   },
   {
     id: "listings",
@@ -39,18 +39,15 @@ export function MarketplaceControls({
   return (
     <form
       action={collectionPath(collectionId)}
-      className="space-y-5 rounded-[2rem] border border-ivory/10 bg-ivory/[0.045] p-5 shadow-[0_24px_90px_rgba(0,0,0,0.22)]"
+      className="sticky top-[73px] z-20 space-y-5 rounded-[2rem] border border-ivory/10 bg-ink/88 p-5 shadow-[0_24px_90px_rgba(0,0,0,0.22)] backdrop-blur-xl"
     >
       <input type="hidden" name="view" value={activeView} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-base font-semibold text-ivory">
-            Browse controls
-          </p>
+          <p className="text-base font-semibold text-ivory">Browse controls</p>
           <p className="mt-1 text-sm text-bone/75">
-            Move between discovery, listings, bids, and owned NFTs without
-            opening an endless grid.
+            Filter by token, price, and listing status across marketplace views.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -85,7 +82,7 @@ export function MarketplaceControls({
         ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_1fr_1fr_1fr_auto]">
+      <div className="grid gap-4 lg:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto]">
         <label className="space-y-2">
           <span className="text-xs uppercase tracking-[0.24em] text-bone/75">
             Token ID
@@ -140,6 +137,21 @@ export function MarketplaceControls({
             className="h-12 w-full rounded-2xl border border-ivory/10 bg-ink px-4 text-sm text-ivory outline-none transition focus:border-chartreuse"
           />
         </label>
+        <label className="space-y-2">
+          <span className="text-xs uppercase tracking-[0.24em] text-bone/75">
+            Page size
+          </span>
+          <select
+            name="pageSize"
+            defaultValue={search.pageSize ?? 12}
+            aria-label="Page size"
+            className="h-12 w-full rounded-2xl border border-ivory/10 bg-ink px-4 text-sm text-ivory outline-none transition focus:border-chartreuse"
+          >
+            <option value="12">12</option>
+            <option value="18">18</option>
+            <option value="24">24</option>
+          </select>
+        </label>
         <div className="flex items-end">
           <button
             type="submit"
@@ -149,6 +161,19 @@ export function MarketplaceControls({
           </button>
         </div>
       </div>
+
+      {activeView === "discover" ? (
+        <label className="inline-flex items-center gap-3 rounded-2xl border border-ivory/10 bg-ink/45 px-4 py-3 text-sm text-bone/78">
+          <input
+            type="checkbox"
+            name="listedOnly"
+            value="1"
+            defaultChecked={search.listedOnly}
+            className="size-4 rounded border-ivory/20 bg-ink accent-copper"
+          />
+          Show listed tokens only
+        </label>
+      ) : null}
     </form>
   );
 }

@@ -15,6 +15,10 @@ const collectionIndexMocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/marketplace/queries", () => queryMocks);
 vi.mock("@/lib/marketplace/collection-index-live", () => collectionIndexMocks);
+vi.mock("@/lib/pricing/eth-usd", () => ({
+  getEthUsdPrice: vi.fn().mockResolvedValue(3000),
+  formatEthWithUsd: vi.fn(() => "$3,750.00"),
+}));
 vi.mock("@/components/marketplace/token-actions", () => ({
   TokenActions: () => <div>Mock trading controls</div>,
 }));
@@ -69,6 +73,9 @@ describe("TokenPage", () => {
     collectionIndexMocks.getCollectionTokenIds.mockResolvedValueOnce([
       18, 19, 20,
     ]);
+    queryMocks.getToken.mockImplementation(async (_collectionId, tokenId) =>
+      token({ tokenId }),
+    );
 
     render(
       await TokenPage({
@@ -137,6 +144,13 @@ describe("TokenPage", () => {
     collectionIndexMocks.getCollectionTokenIds.mockResolvedValueOnce([
       1232, 1233, 1234,
     ]);
+    queryMocks.getToken.mockImplementation(async (_collectionId, tokenId) =>
+      token({
+        collectionId: "random-walk",
+        tokenId,
+        name: `Random Walk #${String(tokenId).padStart(6, "0")}`,
+      }),
+    );
 
     render(
       await TokenPage({

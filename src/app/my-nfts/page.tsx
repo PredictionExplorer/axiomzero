@@ -2,12 +2,15 @@ import type { Metadata } from "next";
 
 import { collections } from "@/config/collections";
 import { MyNftsPanel } from "@/components/marketplace/my-nfts-panel";
+import { buildPageMetadata } from "@/lib/seo/metadata";
+import { MY_NFTS_PATH } from "@/lib/marketplace/routes";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildPageMetadata({
   title: "My NFTs",
   description:
     "Connect a wallet to view, list, and manage bids for your Random Walk and Cosmic Signature NFTs.",
-};
+  path: MY_NFTS_PATH,
+});
 
 export default function MyNftsPage() {
   return (
@@ -17,7 +20,7 @@ export default function MyNftsPage() {
           <p className="text-sm uppercase tracking-[0.42em] text-copper">
             Wallet workspace
           </p>
-          <h1 className="mt-5 max-w-4xl text-5xl font-semibold tracking-[-0.06em] text-ivory sm:text-7xl">
+          <h1 className="font-display mt-5 max-w-4xl text-5xl font-semibold tracking-[-0.06em] text-ivory sm:text-7xl">
             My NFTs
           </h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-bone/70">

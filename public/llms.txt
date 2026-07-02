@@ -1,0 +1,36 @@
+# Axiom Zero
+
+> Zero-fee NFT marketplace for fair-launch generative art on Arbitrum.
+
+Axiom Zero lists Random Walk NFTs and Cosmic Signature NFTs with no platform fees, no allowlists, and no founder privilege.
+
+## Collections
+
+- Random Walk: mathematics-driven stochastic path generative art
+- Cosmic Signature: three-body physics orbital signatures
+
+## Marketplace facts
+
+- Platform fee: 0%
+- Chain: Arbitrum
+- Wallet actions: connect wallet, buy listings, place bids, list NFTs, cancel orders
+- Trading is executed through verified marketplace contracts; the UI reads normalized marketplace data server-side
+
+## Primary URLs
+
+- Home: https://axiomzero.market/
+- Random Walk: https://axiomzero.market/random-walk
+- Cosmic Signature: https://axiomzero.market/cosmic-signature
+- My NFTs: https://axiomzero.market/my-nfts
+- Token pages: https://axiomzero.market/token/{collectionId}/{tokenId}
+
+## FAQ
+
+- Axiom Zero does not charge marketplace fees.
+- Collections are fair-launch generative art with equal market access.
+- Random Walk includes beauty score metadata and provenance history when available from the collection API.
+- Cosmic Signature metadata is served from the Cosmic Signature NFT API.
+
+## Contracts
+
+See the site footer for verified NFT and marketplace contract addresses on Arbiscan.

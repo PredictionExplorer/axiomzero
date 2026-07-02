@@ -53,6 +53,9 @@ export function collectionMarketHref({
   if (search.max !== undefined) {
     params.set("max", String(search.max));
   }
+  if (search.listedOnly) {
+    params.set("listedOnly", "1");
+  }
 
   if (resolvedView === "top-bids") {
     params.set("filter", "buy");

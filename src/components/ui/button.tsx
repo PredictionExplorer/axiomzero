@@ -5,10 +5,13 @@ import { cn } from "@/lib/utils";
 
 const variants = {
   primary:
-    "bg-copper text-ink shadow-[0_16px_60px_rgba(216,121,50,0.24)] hover:bg-ember",
+    "bg-copper text-ink shadow-[0_16px_60px_rgba(216,121,50,0.24)] hover:bg-ember active:scale-[0.98]",
   secondary:
-    "border border-ivory/15 bg-ivory/[0.04] text-ivory hover:bg-ivory/[0.09]",
-  ghost: "text-bone hover:bg-ivory/[0.07] hover:text-ivory",
+    "border border-ivory/15 bg-ivory/[0.04] text-ivory hover:bg-ivory/[0.09] active:scale-[0.98]",
+  outline:
+    "border border-accent bg-transparent text-ivory hover:bg-accent-muted active:scale-[0.98]",
+  ghost:
+    "text-bone hover:bg-ivory/[0.07] hover:text-ivory active:scale-[0.98]",
 };
 
 type Variant = keyof typeof variants;

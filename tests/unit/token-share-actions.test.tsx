@@ -20,6 +20,8 @@ describe("TokenShareActions", () => {
               "/token/cosmic-signature/19?theme=black&media=image&tab=notes",
           },
         ]}
+        detailHref="https://axiomzero.market/token/cosmic-signature/19"
+        title="NUMBA 19"
       />,
     );
 
@@ -31,5 +33,9 @@ describe("TokenShareActions", () => {
       "/token/cosmic-signature/19?theme=black&media=image&tab=notes",
     );
     expect(screen.getByText("detail link copied.")).toBeVisible();
+    expect(screen.getByRole("link", { name: /share on x/i })).toHaveAttribute(
+      "href",
+      expect.stringContaining("twitter.com/intent/tweet"),
+    );
   });
 });

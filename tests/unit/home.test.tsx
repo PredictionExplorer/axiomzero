@@ -1,88 +1,105 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { MarketOffer } from "@/lib/marketplace/types";
+import type {
+  HomeArtworkItem,
+  HomeCollectionPulse,
+} from "@/lib/marketplace/home-data";
 
-const queryMocks = vi.hoisted(() => ({
-  getMarketplaceOffers: vi.fn(),
+const homeDataMocks = vi.hoisted(() => ({
+  getHomeHeroArtworks: vi.fn(),
+  getHomeMarketOverview: vi.fn(),
 }));
 
-vi.mock("@/lib/marketplace/queries", async (importOriginal) => {
+vi.mock("@/lib/marketplace/home-data", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("@/lib/marketplace/queries")>();
+    await importOriginal<typeof import("@/lib/marketplace/home-data")>();
 
   return {
     ...actual,
-    getMarketplaceOffers: queryMocks.getMarketplaceOffers,
+    getHomeHeroArtworks: homeDataMocks.getHomeHeroArtworks,
+    getHomeMarketOverview: homeDataMocks.getHomeMarketOverview,
   };
 });
 
 import Home from "@/app/page";
 
-function marketOffer(overrides: Partial<MarketOffer>): MarketOffer {
+function pulse(
+  overrides: Partial<HomeCollectionPulse> & {
+    collectionId: HomeCollectionPulse["collectionId"];
+    shortName: string;
+  },
+): HomeCollectionPulse {
   return {
-    id: "offer",
-    collectionId: "random-walk",
-    tokenId: 1,
-    kind: "sell",
-    priceEth: 1,
-    maker: "0x0000000000000000000000000000000000000001",
-    createdAt: "2026-01-01T00:00:00.000Z",
+    supply: 100,
+    stats: {
+      totalOffers: 0,
+      sellListings: 0,
+      buyOffers: 0,
+      floorOffer: undefined,
+      topBidOffer: undefined,
+    },
     ...overrides,
   };
 }
 
 describe("Home", () => {
   it("links to the three main destinations and token-specific market stats", async () => {
-    const randomWalkOffers = [
-      marketOffer({
-        id: "rw-higher-listing",
-        collectionId: "random-walk",
-        tokenId: 5,
-        kind: "sell",
-        priceEth: 3,
-      }),
-      marketOffer({
-        id: "rw-inactive-low-listing",
-        collectionId: "random-walk",
-        tokenId: 6,
-        kind: "sell",
-        priceEth: 0.1,
-        active: false,
-      }),
-      marketOffer({
-        id: "rw-floor",
+    const randomWalkPulse = pulse({
+      collectionId: "random-walk",
+      shortName: "Random Walk",
+      supply: 4086,
+      stats: {
+        totalOffers: 4,
+        sellListings: 2,
+        buyOffers: 2,
+        floorOffer: {
+          id: "rw-floor",
+          collectionId: "random-walk",
+          tokenId: 7,
+          kind: "sell",
+          priceEth: 1.5,
+          maker: "0x0000000000000000000000000000000000000001",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+        topBidOffer: {
+          id: "rw-bid",
+          collectionId: "random-walk",
+          tokenId: 9,
+          kind: "buy",
+          priceEth: 2.25,
+          maker: "0x0000000000000000000000000000000000000002",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+      },
+    });
+    const cosmicPulse = pulse({
+      collectionId: "cosmic-signature",
+      shortName: "Cosmic Signature",
+      supply: 24,
+    });
+    const featured: HomeArtworkItem[] = [
+      {
         collectionId: "random-walk",
         tokenId: 7,
-        kind: "sell",
+        name: "Random Walk #7",
+        artwork: { image: "/rw-7.png", alt: "Random Walk #7 artwork" },
         priceEth: 1.5,
-      }),
-      marketOffer({
-        id: "rw-lower-bid",
-        collectionId: "random-walk",
-        tokenId: 8,
-        kind: "buy",
-        priceEth: 1,
-      }),
-      marketOffer({
-        id: "rw-bid",
-        collectionId: "random-walk",
-        tokenId: 9,
-        kind: "buy",
-        priceEth: 2.25,
-      }),
-      marketOffer({
-        id: "rw-inactive-high-bid",
-        collectionId: "random-walk",
-        tokenId: 10,
-        kind: "buy",
-        priceEth: 10,
-        active: false,
-      }),
+      },
     ];
-    queryMocks.getMarketplaceOffers
-      .mockResolvedValueOnce(randomWalkOffers)
-      .mockResolvedValueOnce([]);
+
+    homeDataMocks.getHomeHeroArtworks.mockResolvedValue([
+      {
+        collectionId: "random-walk",
+        tokenId: 1,
+        name: "Random Walk #1",
+        artwork: { image: "/rw-1.png", alt: "Random Walk #1 artwork" },
+      },
+    ]);
+    homeDataMocks.getHomeMarketOverview.mockResolvedValue({
+      pulses: [randomWalkPulse, cosmicPulse],
+      featured,
+    });
 
     render(await Home());
 
@@ -103,6 +120,14 @@ describe("Home", () => {
     expect(
       screen.getByRole("link", { name: /random walk highest bid 2.25 eth/i }),
     ).toHaveAttribute("href", "/token/random-walk/9");
-    expect(screen.getAllByText("N/A")).toHaveLength(2);
+    expect(screen.getAllByText("N/A").length).toBeGreaterThanOrEqual(2);
+    expect(
+      screen.getByRole("heading", {
+        name: /questions collectors ask before they trade/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /live works on the market/i }),
+    ).toBeInTheDocument();
   });
 });

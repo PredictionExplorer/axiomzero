@@ -5,7 +5,8 @@
       "url": [
         "http://localhost:3000/",
         "http://localhost:3000/random-walk",
-        "http://localhost:3000/cosmic-signature"
+        "http://localhost:3000/cosmic-signature",
+        "http://localhost:3000/token/random-walk/1"
       ],
       "numberOfRuns": 1
     },

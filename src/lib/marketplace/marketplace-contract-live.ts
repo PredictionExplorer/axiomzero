@@ -67,6 +67,9 @@ function createMarketplacePublicClient(): MarketplaceClient {
       process.env.ARBITRUM_RPC_URL ??
         process.env.NEXT_PUBLIC_ARBITRUM_RPC_URL ??
         "https://arb1.arbitrum.io/rpc",
+      // Keep server renders bounded when the public RPC is slow or
+      // rate-limited; callers fall back to cached or empty market data.
+      { timeout: 5_000, retryCount: 1 },
     ),
   }) as unknown as MarketplaceClient;
 }

@@ -72,6 +72,11 @@ function parseInteger(
   return Math.min(Math.max(parsed, min), max);
 }
 
+function parseBoolean(value: string | string[] | undefined) {
+  const resolved = firstValue(value);
+  return resolved === "1" || resolved === "true";
+}
+
 export function parseMarketplaceSearchParams(
   params: Record<string, string | string[] | undefined>,
 ): MarketplaceSearchParams {
@@ -117,6 +122,7 @@ export function parseMarketplaceSearchParams(
       min: 1,
       max: MAX_TOKEN_PAGE_SIZE,
     }),
+    listedOnly: parseBoolean(params.listedOnly),
   };
 }
 
@@ -177,14 +183,18 @@ export function sortOffers(
   });
 }
 
-async function getMarketplaceOffersForCollection(
-  collectionId: CollectionId,
-  search: MarketplaceSearchParams,
-) {
-  const requestedKind =
-    search.kind && search.kind !== "all" ? search.kind : "sell";
+const OFFER_SCAN_CACHE_TTL_MS = 30_000;
+const OFFER_SCAN_TIME_BUDGET_MS = 6_000;
+const offerScanCache = new Map<
+  CollectionId,
+  { offers: Promise<MarketOffer[]>; fetchedAt: number }
+>();
+const lastGoodOfferScan = new Map<CollectionId, MarketOffer[]>();
+
+function startOfferScan(collectionId: CollectionId) {
   const collection = requireCollection(collectionId);
-  const offers = await fetchCollectionContractOffers({
+
+  return fetchCollectionContractOffers({
     collectionId,
     nftAddress: collection.nftAddress,
     marketplaceAddress: collection.marketplaceAddress,
@@ -193,6 +203,57 @@ async function getMarketplaceOffersForCollection(
         ? async (tokenId) => randomWalkTokenPreview(tokenId)
         : fetchCosmicSignatureMetadata,
   });
+}
+
+/**
+ * Collection offer scans are expensive multicalls against a public RPC, so
+ * results are shared for a short TTL and stale data is served whenever a
+ * refresh fails or exceeds its time budget.
+ */
+function scanCollectionContractOffers(collectionId: CollectionId) {
+  if (process.env.NODE_ENV === "test") {
+    return startOfferScan(collectionId);
+  }
+
+  const cached = offerScanCache.get(collectionId);
+  let scan: Promise<MarketOffer[]>;
+
+  if (cached && Date.now() - cached.fetchedAt < OFFER_SCAN_CACHE_TTL_MS) {
+    scan = cached.offers;
+  } else {
+    scan = startOfferScan(collectionId).then((offers) => {
+      lastGoodOfferScan.set(collectionId, offers);
+      return offers;
+    });
+    scan.catch(() => offerScanCache.delete(collectionId));
+    offerScanCache.set(collectionId, { offers: scan, fetchedAt: Date.now() });
+  }
+
+  const stale = lastGoodOfferScan.get(collectionId);
+
+  if (stale === undefined) {
+    return scan;
+  }
+
+  return Promise.race([
+    scan.catch(() => stale),
+    new Promise<MarketOffer[]>((resolve) => {
+      const timer = setTimeout(
+        () => resolve(stale),
+        OFFER_SCAN_TIME_BUDGET_MS,
+      );
+      timer.unref?.();
+    }),
+  ]);
+}
+
+async function getMarketplaceOffersForCollection(
+  collectionId: CollectionId,
+  search: MarketplaceSearchParams,
+) {
+  const requestedKind =
+    search.kind && search.kind !== "all" ? search.kind : "sell";
+  const offers = await scanCollectionContractOffers(collectionId);
 
   return search.kind === "all"
     ? offers
@@ -301,18 +362,12 @@ async function tokenCandidates(search: MarketplaceSearchParams) {
   });
 }
 
-export async function getMarketplaceTokenPage(
-  search: MarketplaceSearchParams,
-): Promise<MarketplaceTokenPage> {
-  const candidates = await tokenCandidates(search);
-  const pageSize = search.pageSize ?? DEFAULT_TOKEN_PAGE_SIZE;
-  const totalPages = Math.max(1, Math.ceil(candidates.length / pageSize));
-  const page = Math.min(search.page ?? DEFAULT_TOKEN_PAGE, totalPages);
-  const offset = (page - 1) * pageSize;
-  const pageCandidates = candidates.slice(offset, offset + pageSize);
-  const items = (
+async function loadTokenSummaryPage(
+  refs: Array<{ collectionId: CollectionId; tokenId: number }>,
+) {
+  return (
     await Promise.all(
-      pageCandidates.map(async ({ collectionId, tokenId }) => {
+      refs.map(async ({ collectionId, tokenId }) => {
         try {
           return summarizeTokenMarket(
             await getTokenMarket(collectionId, tokenId),
@@ -323,12 +378,87 @@ export async function getMarketplaceTokenPage(
       }),
     )
   ).filter((item): item is TokenMarketSummary => Boolean(item));
+}
+
+/**
+ * Discover pages with listing-based filters (listed only, price bounds, or a
+ * price sort) are built from the cached collection offer scan instead of
+ * loading every minted token, so the work stays bounded by page size.
+ */
+async function listedTokenPage(
+  search: MarketplaceSearchParams,
+  pageSize: number,
+  sort: SortKey,
+): Promise<MarketplaceTokenPage> {
+  const offers = await getMarketplaceOffers({
+    collection: search.collection,
+    kind: "sell",
+    view: "listings",
+    sort,
+    query: search.query,
+    min: search.min,
+    max: search.max,
+  });
+  const seen = new Set<string>();
+  const tokenRefs: Array<{ collectionId: CollectionId; tokenId: number }> = [];
+
+  for (const offer of offers) {
+    const key = `${offer.collectionId}:${offer.tokenId}`;
+
+    if (!seen.has(key)) {
+      seen.add(key);
+      tokenRefs.push({
+        collectionId: offer.collectionId,
+        tokenId: offer.tokenId,
+      });
+    }
+  }
+
+  const totalPages = Math.max(1, Math.ceil(tokenRefs.length / pageSize));
+  const page = Math.min(search.page ?? DEFAULT_TOKEN_PAGE, totalPages);
+  const offset = (page - 1) * pageSize;
+  const items = await loadTokenSummaryPage(
+    tokenRefs.slice(offset, offset + pageSize),
+  );
 
   return {
     items,
     page,
     pageSize,
-    totalItems: candidates.length,
+    totalItems: tokenRefs.length,
+    totalPages,
+  };
+}
+
+export async function getMarketplaceTokenPage(
+  search: MarketplaceSearchParams,
+): Promise<MarketplaceTokenPage> {
+  const pageSize = search.pageSize ?? DEFAULT_TOKEN_PAGE_SIZE;
+  const sort = search.sort ?? "price-asc";
+  const usesListingFilters =
+    Boolean(search.listedOnly) ||
+    search.min !== undefined ||
+    search.max !== undefined ||
+    sort === "price-desc";
+
+  if (usesListingFilters) {
+    return listedTokenPage(search, pageSize, sort);
+  }
+
+  const candidates = await tokenCandidates(search);
+  const ordered = sort === "recent" ? [...candidates].reverse() : candidates;
+  const totalPages = Math.max(1, Math.ceil(ordered.length / pageSize));
+  const page = Math.min(search.page ?? DEFAULT_TOKEN_PAGE, totalPages);
+  const offset = (page - 1) * pageSize;
+  const items = await loadTokenSummaryPage(
+    ordered.slice(offset, offset + pageSize),
+  );
+
+  return {
+    items,
+    page,
+    pageSize,
+    totalItems: ordered.length,
     totalPages,
   };
 }
@@ -345,20 +475,44 @@ export async function getToken(collectionId: CollectionId, tokenId: number) {
   return fetchCosmicSignatureMetadata(tokenId);
 }
 
-async function fetchContractOffersForCollectionToken(
+const TOKEN_OFFERS_CACHE_TTL_MS = 30_000;
+const tokenOffersCache = new Map<
+  string,
+  { offers: Promise<MarketOffer[]>; fetchedAt: number }
+>();
+
+function fetchContractOffersForCollectionToken(
   collectionId: CollectionId,
   tokenId: number,
   token: Pick<MarketToken, "artwork">,
 ) {
   const collection = requireCollection(collectionId);
+  const useTtlCache = process.env.NODE_ENV !== "test";
+  const cacheKey = `${collectionId}:${tokenId}`;
+  const cached = tokenOffersCache.get(cacheKey);
 
-  return fetchContractOffersForTokenId({
+  if (
+    useTtlCache &&
+    cached &&
+    Date.now() - cached.fetchedAt < TOKEN_OFFERS_CACHE_TTL_MS
+  ) {
+    return cached.offers;
+  }
+
+  const offers = fetchContractOffersForTokenId({
     collectionId,
     nftAddress: collection.nftAddress,
     marketplaceAddress: collection.marketplaceAddress,
     tokenId,
     artwork: token.artwork,
   });
+
+  if (useTtlCache) {
+    tokenOffersCache.set(cacheKey, { offers, fetchedAt: Date.now() });
+    offers.catch(() => tokenOffersCache.delete(cacheKey));
+  }
+
+  return offers;
 }
 
 export async function getOffersForToken(
@@ -423,7 +577,7 @@ export async function getTokenMarket(
     collectionId,
     tokenId,
     token,
-  );
+  ).catch(() => []);
 
   return { token, offers };
 }
