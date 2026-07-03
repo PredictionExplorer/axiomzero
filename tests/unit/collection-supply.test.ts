@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { requireCollection } from "@/config/collections";
-import { formatCollectionSupplyLabel } from "@/lib/marketplace/collection-supply";
+import {
+  fallbackCollectionSupply,
+  formatCollectionSupplyLabel,
+} from "@/lib/marketplace/collection-supply";
 
 describe("collection supply labels", () => {
   it("formats live supply with collection-specific nouns", () => {
@@ -23,5 +26,17 @@ describe("collection supply labels", () => {
     expect(
       formatCollectionSupplyLabel(requireCollection("random-walk"), undefined),
     ).toBe("Live supply unavailable");
+  });
+
+  it("derives the fallback supply from the inclusive token id range", () => {
+    expect(fallbackCollectionSupply(requireCollection("random-walk"))).toBe(
+      4086,
+    );
+    expect(
+      fallbackCollectionSupply(requireCollection("cosmic-signature")),
+    ).toBe(24);
+    expect(fallbackCollectionSupply({ tokenRange: { start: 5, end: 5 } })).toBe(
+      1,
+    );
   });
 });

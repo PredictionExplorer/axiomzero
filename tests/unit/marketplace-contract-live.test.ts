@@ -1,9 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   fetchCollectionContractOffers,
   fetchContractOffersForTokenId,
   normalizeContractOffer,
+  resetMarketplaceOfferScanCacheForTests,
   type MarketplaceOfferTuple,
 } from "@/lib/marketplace/marketplace-contract-live";
 import { randomWalkTokenPreview } from "@/lib/marketplace/random-walk-live";
@@ -70,6 +71,10 @@ function mockClient(offers: Record<number, MarketplaceOfferTuple>) {
 }
 
 describe("marketplace contract live adapter", () => {
+  beforeEach(() => {
+    resetMarketplaceOfferScanCacheForTests();
+  });
+
   it("normalizes active sell and buy offers", () => {
     expect(
       normalizeContractOffer(3, offer(), "cosmic-signature", {
@@ -215,6 +220,74 @@ describe("marketplace contract live adapter", () => {
       }),
     ]);
     expect(loadToken).toHaveBeenCalledWith(1233);
+  });
+
+  it("shares one raw marketplace scan across both collections", async () => {
+    const client = mockClient({
+      0: offer({ nftAddress: cosmicNft, tokenId: 1n }),
+      1: offer({ nftAddress: otherNft, tokenId: 1233n }),
+    });
+
+    const [cosmicOffers, randomWalkOffers] = await Promise.all([
+      fetchCollectionContractOffers({
+        collectionId: "cosmic-signature",
+        nftAddress: cosmicNft,
+        marketplaceAddress: marketplace,
+        client,
+      }),
+      fetchCollectionContractOffers({
+        collectionId: "random-walk",
+        nftAddress: otherNft,
+        marketplaceAddress: marketplace,
+        client,
+      }),
+    ]);
+
+    expect(cosmicOffers.map((marketOffer) => marketOffer.tokenId)).toEqual([
+      1,
+    ]);
+    expect(randomWalkOffers.map((marketOffer) => marketOffer.tokenId)).toEqual(
+      [1233],
+    );
+    // numOffers and the offer multicall each ran once for both collections.
+    expect(client.readContract).toHaveBeenCalledTimes(1);
+    expect(client.multicall).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns no offers for an empty marketplace", async () => {
+    const client = mockClient({});
+
+    await expect(
+      fetchCollectionContractOffers({
+        collectionId: "cosmic-signature",
+        nftAddress: cosmicNft,
+        marketplaceAddress: marketplace,
+        client,
+      }),
+    ).resolves.toEqual([]);
+  });
+
+  it("throws instead of resolving empty when every offer read fails", async () => {
+    const readContract = vi.fn(async () => 3n);
+    const multicall = vi.fn(
+      async (call: { contracts: readonly unknown[] }) =>
+        call.contracts.map(
+          () =>
+            ({
+              status: "failure",
+              error: new Error("rate limited"),
+            }) as const,
+        ),
+    );
+
+    await expect(
+      fetchCollectionContractOffers({
+        collectionId: "cosmic-signature",
+        nftAddress: cosmicNft,
+        marketplaceAddress: marketplace,
+        client: { readContract, multicall },
+      }),
+    ).rejects.toThrow(/offer scan failed/i);
   });
 
   it("respects the collection scan limit", async () => {

@@ -49,9 +49,11 @@ function createErc721PublicClient(): Erc721IndexClient {
       process.env.ARBITRUM_RPC_URL ??
         process.env.NEXT_PUBLIC_ARBITRUM_RPC_URL ??
         "https://arb1.arbitrum.io/rpc",
-      // Keep server renders bounded when the public RPC is slow or
-      // rate-limited; token id reads fall back to configured ranges.
-      { timeout: 5_000, retryCount: 1 },
+      // Batching folds the tokenByIndex multicall chunks into a few HTTP
+      // requests so rate-limited public RPCs do not drop the scan. Timeouts
+      // keep server renders bounded; token id reads fall back to configured
+      // ranges.
+      { batch: true, timeout: 5_000, retryCount: 1 },
     ),
   }) as unknown as Erc721IndexClient;
 }

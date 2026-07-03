@@ -134,7 +134,10 @@ describe("home data", () => {
 
     expect(overview.pulses).toHaveLength(2);
     expect(overview.pulses[0]?.stats.totalOffers).toBe(0);
-    expect(overview.pulses[0]?.supply).toBeGreaterThan(0);
+    // Fallback supply is the token count implied by the configured id range
+    // (ids 0-4085 and 0-23), not the highest token id.
+    expect(overview.pulses[0]?.supply).toBe(4086);
+    expect(overview.pulses[1]?.supply).toBe(24);
     expect(overview.featured).toEqual([]);
     expect(overview.pulses[0]?.sales).toBeUndefined();
     expect(overview.activity).toBeUndefined();

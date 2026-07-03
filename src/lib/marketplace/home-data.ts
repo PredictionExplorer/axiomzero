@@ -7,6 +7,7 @@ import {
   getToken,
 } from "@/lib/marketplace/queries";
 import { getCollectionSupply } from "@/lib/marketplace/collection-index-live";
+import { fallbackCollectionSupply } from "@/lib/marketplace/collection-supply";
 import {
   getCollectionSales,
   summarizeSales,
@@ -189,7 +190,7 @@ export async function getHomeMarketOverview(
         pulse: {
           collectionId: collection.id,
           shortName: collection.shortName,
-          supply: supply ?? collection.tokenRange.end,
+          supply: supply ?? fallbackCollectionSupply(collection),
           stats: getMarketplaceStats(offers),
           sales: sales ? summarizeSales(sales) : undefined,
         } satisfies HomeCollectionPulse,

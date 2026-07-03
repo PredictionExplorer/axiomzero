@@ -55,6 +55,12 @@ Deploy on Vercel with Node 20+ and the variables listed in `env.example`.
 Verify all contract addresses against official Random Walk and Cosmic Signature
 sources before enabling real trading flows in production.
 
+Set `ARBITRUM_RPC_URL` to a dedicated provider endpoint (Alchemy, Infura,
+QuickNode, ...) in production. Without it the app falls back to the public
+`arb1.arbitrum.io/rpc` endpoint, which rate-limits shared hosting IPs and
+intermittently fails the on-chain offer scans, baking "N/A" market stats into
+statically cached pages.
+
 ## Brand Notes
 
 Axiom Zero avoids blue and purple entirely. The visual system uses ink, carbon,

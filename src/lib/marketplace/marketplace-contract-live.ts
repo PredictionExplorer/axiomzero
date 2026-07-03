@@ -67,9 +67,11 @@ function createMarketplacePublicClient(): MarketplaceClient {
       process.env.ARBITRUM_RPC_URL ??
         process.env.NEXT_PUBLIC_ARBITRUM_RPC_URL ??
         "https://arb1.arbitrum.io/rpc",
-      // Keep server renders bounded when the public RPC is slow or
-      // rate-limited; callers fall back to cached or empty market data.
-      { timeout: 5_000, retryCount: 1 },
+      // Batching coalesces the multicall chunks of a full offer scan into a
+      // few HTTP requests, which keeps rate-limited public RPCs from dropping
+      // parts of the scan. Timeouts keep server renders bounded; callers fall
+      // back to cached or empty market data.
+      { batch: true, timeout: 5_000, retryCount: 1 },
     ),
   }) as unknown as MarketplaceClient;
 }
@@ -223,15 +225,30 @@ async function artworkByTokenId(
   return new Map(entries);
 }
 
-export async function fetchCollectionContractOffers({
-  collectionId,
-  nftAddress,
+type RawMarketplaceOffer = {
+  offerId: number;
+  offer: MarketplaceOfferTuple;
+};
+
+const RAW_OFFER_SCAN_CACHE_TTL_MS = 30_000;
+const rawOfferScanCache = new Map<
+  string,
+  { scan: Promise<RawMarketplaceOffer[]>; fetchedAt: number }
+>();
+
+export function resetMarketplaceOfferScanCacheForTests() {
+  rawOfferScanCache.clear();
+}
+
+async function scanMarketplaceOffers({
   marketplaceAddress,
-  loadToken,
-  maxOffers = Number(process.env.MARKETPLACE_SCAN_LIMIT) ||
-    DEFAULT_MARKETPLACE_SCAN_LIMIT,
-  client = createMarketplacePublicClient(),
-}: FetchCollectionOffersOptions) {
+  maxOffers,
+  client,
+}: {
+  marketplaceAddress: `0x${string}`;
+  maxOffers: number;
+  client: MarketplaceClient;
+}): Promise<RawMarketplaceOffer[]> {
   const offerCount = (await client.readContract({
     address: marketplaceAddress,
     abi: marketplaceAbi,
@@ -245,6 +262,58 @@ export async function fetchCollectionContractOffers({
     startOfferId + BigInt(index),
   );
   const offers = await readOffersByIds(client, marketplaceAddress, offerIds);
+
+  // Offer reads only fail wholesale when the RPC drops the scan (e.g. rate
+  // limiting). Resolving to [] here would render an empty market and poison
+  // last-good fallbacks, so surface the failure to callers instead.
+  if (offerIds.length > 0 && offers.length === 0) {
+    throw new Error(
+      "Marketplace offer scan failed: no offers could be read from the RPC.",
+    );
+  }
+
+  return offers;
+}
+
+/**
+ * Both collections trade on one marketplace contract, so the raw offer scan
+ * is cached briefly per contract address and shared by concurrent
+ * per-collection callers instead of re-reading every offer for each
+ * collection.
+ */
+function getMarketplaceOfferTuples(options: {
+  marketplaceAddress: `0x${string}`;
+  maxOffers: number;
+  client: MarketplaceClient;
+}): Promise<RawMarketplaceOffer[]> {
+  const cacheKey = options.marketplaceAddress.toLowerCase();
+  const cached = rawOfferScanCache.get(cacheKey);
+
+  if (cached && Date.now() - cached.fetchedAt < RAW_OFFER_SCAN_CACHE_TTL_MS) {
+    return cached.scan;
+  }
+
+  const scan = scanMarketplaceOffers(options);
+  scan.catch(() => rawOfferScanCache.delete(cacheKey));
+  rawOfferScanCache.set(cacheKey, { scan, fetchedAt: Date.now() });
+
+  return scan;
+}
+
+export async function fetchCollectionContractOffers({
+  collectionId,
+  nftAddress,
+  marketplaceAddress,
+  loadToken,
+  maxOffers = Number(process.env.MARKETPLACE_SCAN_LIMIT) ||
+    DEFAULT_MARKETPLACE_SCAN_LIMIT,
+  client = createMarketplacePublicClient(),
+}: FetchCollectionOffersOptions) {
+  const offers = await getMarketplaceOfferTuples({
+    marketplaceAddress,
+    maxOffers,
+    client,
+  });
   const matchingOffers = offers.filter(({ offer }) => {
     const [offerNftAddress, , , , , active] = offer;
     return active && sameAddress(offerNftAddress, nftAddress);

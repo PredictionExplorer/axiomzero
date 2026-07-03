@@ -21,7 +21,10 @@ import {
   summarizeSales,
 } from "@/lib/marketplace/sales-live";
 import { getEthUsdPrice } from "@/lib/pricing/eth-usd";
-import { formatCollectionSupplyLabel } from "@/lib/marketplace/collection-supply";
+import {
+  fallbackCollectionSupply,
+  formatCollectionSupplyLabel,
+} from "@/lib/marketplace/collection-supply";
 import { collectionMarketHref, collectionPath } from "@/lib/marketplace/routes";
 import {
   breadcrumbJsonLd,
@@ -121,7 +124,7 @@ export async function CollectionMarketPage({
             name: collection.name,
             description: collection.description,
             path,
-            itemCount: supply ?? collection.tokenRange.end,
+            itemCount: supply ?? fallbackCollectionSupply(collection),
           }),
         ]}
       />
