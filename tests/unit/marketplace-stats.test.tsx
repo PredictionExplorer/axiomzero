@@ -101,6 +101,59 @@ describe("MarketplaceStatsGrid", () => {
     expect(card).toHaveTextContent("4,060");
   });
 
+  it("shows a sold card linking to the latest sale with volume context", () => {
+    render(
+      <MarketplaceStatsGrid
+        stats={{
+          totalOffers: 0,
+          sellListings: 0,
+          buyOffers: 0,
+          floorOffer: undefined,
+          topBidOffer: undefined,
+        }}
+        sales={{
+          count: 26,
+          volumeEth: 4.2,
+          lastSale: {
+            collectionId: "random-walk",
+            tokenId: 4057,
+            offerId: 449,
+            priceEth: 0.3,
+            seller: "0x0000000000000000000000000000000000000011",
+            buyer: "0x0000000000000000000000000000000000000022",
+            blockNumber: 300,
+          },
+        }}
+        usdPerEth={1000}
+      />,
+    );
+
+    const soldCard = screen.getByRole("link", { name: /^sold/i });
+
+    expect(soldCard).toHaveTextContent("26");
+    expect(soldCard).toHaveTextContent("4.20 ETH lifetime volume · ≈ $4,200");
+    expect(soldCard).toHaveAttribute("href", "/token/random-walk/4057");
+  });
+
+  it("keeps the sold card unlinked without a recorded last sale", () => {
+    render(
+      <MarketplaceStatsGrid
+        stats={{
+          totalOffers: 0,
+          sellListings: 0,
+          buyOffers: 0,
+          floorOffer: undefined,
+          topBidOffer: undefined,
+        }}
+        sales={{ count: 0, volumeEth: 0 }}
+      />,
+    );
+
+    expect(screen.queryByRole("link", { name: /^sold/i })).toBeNull();
+    expect(screen.getByText("Sold")).toBeInTheDocument();
+    expect(screen.getByText("0.0000 ETH lifetime volume")).toBeInTheDocument();
+  });
+
   it("adds approximate USD context to floor and top bid when available", () => {
     render(
       <MarketplaceStatsGrid

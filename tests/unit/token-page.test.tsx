@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { MarketOffer, MarketToken } from "@/lib/marketplace/types";
 
@@ -13,12 +13,25 @@ const collectionIndexMocks = vi.hoisted(() => ({
   getCollectionTokenIds: vi.fn(),
 }));
 
+const salesMocks = vi.hoisted(() => ({
+  getCollectionSales: vi.fn(),
+}));
+
 vi.mock("@/lib/marketplace/queries", () => queryMocks);
 vi.mock("@/lib/marketplace/collection-index-live", () => collectionIndexMocks);
 vi.mock("@/lib/pricing/eth-usd", () => ({
   getEthUsdPrice: vi.fn().mockResolvedValue(3000),
   formatEthWithUsd: vi.fn(() => "$3,750.00"),
 }));
+vi.mock("@/lib/marketplace/sales-live", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/marketplace/sales-live")>();
+
+  return {
+    ...actual,
+    getCollectionSales: salesMocks.getCollectionSales,
+  };
+});
 vi.mock("@/components/marketplace/token-actions", () => ({
   TokenActions: () => <div>Mock trading controls</div>,
 }));
@@ -65,6 +78,10 @@ function offer(overrides: Partial<MarketOffer>): MarketOffer {
 }
 
 describe("TokenPage", () => {
+  beforeEach(() => {
+    salesMocks.getCollectionSales.mockResolvedValue(undefined);
+  });
+
   it("renders Cosmic Signature from metadata and hides unavailable controls", async () => {
     queryMocks.getTokenMarket.mockResolvedValueOnce({
       token: token(),
@@ -215,6 +232,50 @@ describe("TokenPage", () => {
     expect(
       screen.getByRole("button", { name: /add token 19 to your watchlist/i }),
     ).toBeVisible();
+  });
+
+  it("surfaces the token's most recent on-chain sale in the market panel", async () => {
+    queryMocks.getTokenMarket.mockResolvedValueOnce({
+      token: token(),
+      offers: [],
+    });
+    collectionIndexMocks.getCollectionTokenIds.mockResolvedValueOnce([19]);
+    salesMocks.getCollectionSales.mockResolvedValue([
+      {
+        collectionId: "cosmic-signature",
+        tokenId: 19,
+        offerId: 5,
+        priceEth: 0.25,
+        seller: "0x0000000000000000000000000000000000000011",
+        buyer: "0x0000000000000000000000000000000000000022",
+        blockNumber: 300,
+        soldAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        collectionId: "cosmic-signature",
+        tokenId: 4,
+        offerId: 2,
+        priceEth: 9,
+        seller: "0x0000000000000000000000000000000000000011",
+        buyer: "0x0000000000000000000000000000000000000022",
+        blockNumber: 100,
+      },
+    ]);
+
+    render(
+      await TokenPage({
+        params: Promise.resolve({
+          collectionId: "cosmic-signature",
+          tokenId: "19",
+        }),
+        searchParams: Promise.resolve({}),
+      }),
+    );
+
+    expect(screen.getByText("Last sale")).toBeInTheDocument();
+    expect(screen.getByText("0.2500 ETH · 3d ago")).toBeInTheDocument();
+    // The other token's sale must not leak into this token's stat.
+    expect(screen.queryByText(/9\.00 ETH/)).toBeNull();
   });
 
   it("labels tokens held by the anchoring vault", async () => {

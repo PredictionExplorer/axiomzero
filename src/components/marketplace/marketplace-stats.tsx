@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import type { MarketplaceStats } from "@/lib/marketplace/types";
+import type { MarketplaceStats, SalesSummary } from "@/lib/marketplace/types";
 import { tokenPath } from "@/lib/marketplace/routes";
 import { formatEthWithUsd } from "@/lib/pricing/eth-usd";
 import { formatEth } from "@/lib/utils";
@@ -20,10 +20,12 @@ export type AnchorSupplyStat = {
 export function MarketplaceStatsGrid({
   stats,
   anchorSupply,
+  sales,
   usdPerEth,
 }: {
   stats: MarketplaceStats;
   anchorSupply?: AnchorSupplyStat;
+  sales?: SalesSummary;
   usdPerEth?: number;
 }) {
   const floorUsd = stats.floorOffer
@@ -31,6 +33,9 @@ export function MarketplaceStatsGrid({
     : undefined;
   const topBidUsd = stats.topBidOffer
     ? formatEthWithUsd(stats.topBidOffer.priceEth, usdPerEth)
+    : undefined;
+  const volumeUsd = sales
+    ? formatEthWithUsd(sales.volumeEth, usdPerEth)
     : undefined;
   const items = [
     {
@@ -60,6 +65,23 @@ export function MarketplaceStatsGrid({
         .join(" · "),
       href: tokenHref(stats.topBidOffer),
     },
+    ...(sales
+      ? [
+          {
+            label: "Sold",
+            value: sales.count.toLocaleString("en-US"),
+            detail: [
+              `${formatEth(sales.volumeEth)} lifetime volume`,
+              volumeUsd ? `≈ ${volumeUsd}` : undefined,
+            ]
+              .filter(Boolean)
+              .join(" · "),
+            href: sales.lastSale
+              ? tokenPath(sales.lastSale.collectionId, sales.lastSale.tokenId)
+              : undefined,
+          },
+        ]
+      : []),
     ...(anchorSupply
       ? [
           {
@@ -72,13 +94,15 @@ export function MarketplaceStatsGrid({
         ]
       : []),
   ];
+  const gridClass =
+    items.length >= 6
+      ? "lg:grid-cols-3 xl:grid-cols-6"
+      : items.length === 5
+        ? "lg:grid-cols-3 xl:grid-cols-5"
+        : "lg:grid-cols-4";
 
   return (
-    <section
-      className={`grid gap-3 sm:grid-cols-2 ${
-        anchorSupply ? "lg:grid-cols-3 xl:grid-cols-5" : "lg:grid-cols-4"
-      }`}
-    >
+    <section className={`grid gap-3 sm:grid-cols-2 ${gridClass}`}>
       {items.map((item) => {
         const cardClass =
           "rounded-[1.6rem] border border-ivory/10 bg-ivory/[0.04] p-5 transition";

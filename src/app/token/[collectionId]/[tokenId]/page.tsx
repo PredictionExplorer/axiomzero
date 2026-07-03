@@ -22,6 +22,10 @@ import {
 } from "@/lib/marketplace/queries";
 import { getCollectionTokenIds } from "@/lib/marketplace/collection-index-live";
 import { randomWalkArtwork } from "@/lib/marketplace/random-walk-live";
+import {
+  getCollectionSales,
+  summarizeSales,
+} from "@/lib/marketplace/sales-live";
 import { collectionPath } from "@/lib/marketplace/routes";
 import {
   buildTokenMediaModel,
@@ -144,10 +148,15 @@ export default async function TokenPage({
   const requestedState = parseTokenDetailState(resolvedSearchParams);
   const mediaModel = buildTokenMediaModel(collection.id, token, requestedState);
   const snapshotTrait = primaryTokenTrait(token);
-  const [tokenIds, usdPerEth] = await Promise.all([
+  const [tokenIds, usdPerEth, collectionSales] = await Promise.all([
     getCollectionTokenIds(collection.id),
     getEthUsdPrice(),
+    getCollectionSales(collection.id).catch(() => undefined),
   ]);
+  const tokenSales = collectionSales?.filter(
+    (sale) => sale.tokenId === token.tokenId,
+  );
+  const tokenSalesSummary = tokenSales ? summarizeSales(tokenSales) : undefined;
   const tokenIndex = tokenIds.indexOf(token.tokenId);
   const previousTokenId = tokenIndex > 0 ? tokenIds[tokenIndex - 1] : undefined;
   const nextTokenId =
@@ -323,7 +332,7 @@ export default async function TokenPage({
 
       <TokenDetailTabs tabs={tabs} activeTab={mediaModel.state.tab}>
         {mediaModel.state.tab === "history" ? (
-          <TokenHistoryPanel token={token} />
+          <TokenHistoryPanel token={token} sales={tokenSalesSummary} />
         ) : mediaModel.state.tab === "notes" ? (
           <TokenCollectorNotesPanel
             collection={collection}
@@ -340,6 +349,7 @@ export default async function TokenPage({
             highestBid={highestBid}
             offers={tokenOffers}
             usdPerEth={usdPerEth}
+            lastSale={tokenSalesSummary?.lastSale}
           />
         )}
       </TokenDetailTabs>

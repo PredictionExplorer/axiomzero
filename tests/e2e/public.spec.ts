@@ -1,5 +1,20 @@
 import { expect, test } from "@playwright/test";
 
+test("home page shows on-chain activity statistics", async ({ page }) => {
+  await page.goto("/");
+
+  // The activity band hydrates from live contract data; totals and the
+  // latest-sales rail should both be present once sales exist on-chain.
+  await expect(
+    page.getByRole("heading", { name: /real trades, settled on-chain/i }),
+  ).toBeVisible();
+  await expect(page.getByText(/nfts sold/i).first()).toBeVisible();
+  await expect(page.getByText(/eth traded/i).first()).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /latest sales/i }),
+  ).toBeVisible();
+});
+
 test("home page introduces Axiom Zero and links to collection pages", async ({
   page,
 }) => {

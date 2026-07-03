@@ -16,6 +16,10 @@ import {
 } from "@/lib/marketplace/queries";
 import { getAnchoredTokenIdSet } from "@/lib/marketplace/anchoring-live";
 import { getCollectionSupply } from "@/lib/marketplace/collection-index-live";
+import {
+  getCollectionSales,
+  summarizeSales,
+} from "@/lib/marketplace/sales-live";
 import { getEthUsdPrice } from "@/lib/pricing/eth-usd";
 import { formatCollectionSupplyLabel } from "@/lib/marketplace/collection-supply";
 import { collectionMarketHref, collectionPath } from "@/lib/marketplace/routes";
@@ -70,6 +74,7 @@ export async function CollectionMarketPage({
     supply,
     anchoredTokenIds,
     usdPerEth,
+    collectionSales,
   ] = await Promise.all([
     getMarketplaceOffers(offerSearch).catch(() => []),
     canReuseVisibleOffers
@@ -81,8 +86,10 @@ export async function CollectionMarketPage({
     getCollectionSupply(collectionId).catch(() => undefined),
     getAnchoredTokenIdSet(collectionId).catch(() => undefined),
     getEthUsdPrice().catch(() => undefined),
+    getCollectionSales(collectionId).catch(() => undefined),
   ]);
   const stats = getMarketplaceStats(statsOffers ?? visibleOffers);
+  const sales = collectionSales ? summarizeSales(collectionSales) : undefined;
   const anchorSupply =
     supply !== undefined && anchoredTokenIds
       ? {
@@ -177,6 +184,7 @@ export async function CollectionMarketPage({
         <MarketplaceStatsGrid
           stats={stats}
           anchorSupply={anchorSupply}
+          sales={sales}
           usdPerEth={usdPerEth}
         />
       </div>

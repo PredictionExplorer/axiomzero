@@ -74,6 +74,21 @@ export const GLOSSARY = {
     definition:
       "An NFT can be anchored on cosmicsignature.com exactly once, ever — the anchor never resets. Never-anchored tokens keep that option open and often carry a premium. Status is read live from Arbitrum.",
   },
+  sold: {
+    term: "Sold",
+    definition:
+      "Completed sales settled through the verified marketplace contract, counted live from its on-chain sale events. Every sale transferred an NFT and paid the seller in the same transaction.",
+  },
+  volume: {
+    term: "Volume",
+    definition:
+      "The combined ETH value of every completed sale on the marketplace contract. Axiom Zero takes 0% of it — the full amount moved between buyers and sellers.",
+  },
+  lastSale: {
+    term: "Last sale",
+    definition:
+      "The most recent completed on-chain sale of this token through the marketplace contract. A useful anchor for judging listings and bids.",
+  },
 } as const satisfies Record<string, GlossaryTerm>;
 
 export type GlossaryKey = keyof typeof GLOSSARY;

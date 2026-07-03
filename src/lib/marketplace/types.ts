@@ -120,6 +120,31 @@ export type MarketplaceStats = {
   buyOffers: number;
 };
 
+/**
+ * A completed marketplace sale reconstructed from an on-chain ItemBought
+ * event joined with its offer record.
+ */
+export type MarketSale = {
+  collectionId: CollectionId;
+  tokenId: number;
+  offerId: number;
+  priceEth: number;
+  seller: `0x${string}`;
+  buyer: `0x${string}`;
+  blockNumber: number;
+  /** ISO timestamp; only enriched for the most recent sales. */
+  soldAt?: string;
+};
+
+export type SalesSummary = {
+  count: number;
+  volumeEth: number;
+  /** Most recent sale. */
+  lastSale?: MarketSale;
+  /** Highest-priced sale. */
+  topSale?: MarketSale;
+};
+
 export type TokenMarketSummary = {
   token: MarketToken;
   activeSellOffer?: MarketOffer;

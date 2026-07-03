@@ -103,6 +103,53 @@ describe("home components", () => {
     ).toHaveAttribute("href", "/token/random-walk/7");
   });
 
+  it("adds sold and volume pulse stats when sales data is available", () => {
+    const pulses: HomeCollectionPulse[] = [
+      {
+        collectionId: "random-walk",
+        shortName: "Random Walk",
+        supply: 4086,
+        stats: {
+          totalOffers: 0,
+          sellListings: 0,
+          buyOffers: 0,
+          floorOffer: undefined,
+          topBidOffer: undefined,
+        },
+        sales: { count: 150, volumeEth: 10.5 },
+      },
+    ];
+
+    render(<MarketPulseStrip pulses={pulses} />);
+
+    expect(screen.getByText("Sold")).toBeInTheDocument();
+    expect(screen.getByText("150")).toBeInTheDocument();
+    expect(screen.getByText("Volume")).toBeInTheDocument();
+    expect(screen.getByText("10.50 ETH")).toBeInTheDocument();
+  });
+
+  it("hides sold and volume pulse stats when the sales scan is unavailable", () => {
+    const pulses: HomeCollectionPulse[] = [
+      {
+        collectionId: "random-walk",
+        shortName: "Random Walk",
+        supply: 4086,
+        stats: {
+          totalOffers: 0,
+          sellListings: 0,
+          buyOffers: 0,
+          floorOffer: undefined,
+          topBidOffer: undefined,
+        },
+      },
+    ];
+
+    render(<MarketPulseStrip pulses={pulses} />);
+
+    expect(screen.queryByText("Sold")).toBeNull();
+    expect(screen.queryByText("Volume")).toBeNull();
+  });
+
   it("explains market pulse jargon with glossary tooltips", () => {
     const pulses: HomeCollectionPulse[] = [
       {

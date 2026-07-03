@@ -20,6 +20,10 @@ const ethUsdMocks = vi.hoisted(() => ({
   getEthUsdPrice: vi.fn(),
 }));
 
+const salesMocks = vi.hoisted(() => ({
+  getCollectionSales: vi.fn(),
+}));
+
 vi.mock("@/lib/marketplace/queries", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@/lib/marketplace/queries")>();
@@ -39,6 +43,15 @@ vi.mock("@/lib/pricing/eth-usd", async (importOriginal) => {
   return {
     ...actual,
     getEthUsdPrice: ethUsdMocks.getEthUsdPrice,
+  };
+});
+vi.mock("@/lib/marketplace/sales-live", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/marketplace/sales-live")>();
+
+  return {
+    ...actual,
+    getCollectionSales: salesMocks.getCollectionSales,
   };
 });
 
@@ -84,6 +97,46 @@ describe("CollectionMarketPage", () => {
     collectionIndexMocks.getCollectionSupply.mockResolvedValue(5_000);
     anchoringMocks.getAnchoredTokenIdSet.mockResolvedValue(undefined);
     ethUsdMocks.getEthUsdPrice.mockResolvedValue(undefined);
+    salesMocks.getCollectionSales.mockResolvedValue(undefined);
+  });
+
+  it("shows a sold stat with lifetime volume when sales data resolves", async () => {
+    queryMocks.getMarketplaceOffers.mockResolvedValue(collectionWideOffers);
+    ethUsdMocks.getEthUsdPrice.mockResolvedValue(2000);
+    salesMocks.getCollectionSales.mockResolvedValue([
+      {
+        collectionId: "random-walk",
+        tokenId: 9,
+        offerId: 3,
+        priceEth: 2,
+        seller: "0x0000000000000000000000000000000000000011",
+        buyer: "0x0000000000000000000000000000000000000022",
+        blockNumber: 300,
+      },
+      {
+        collectionId: "random-walk",
+        tokenId: 7,
+        offerId: 1,
+        priceEth: 0.5,
+        seller: "0x0000000000000000000000000000000000000011",
+        buyer: "0x0000000000000000000000000000000000000022",
+        blockNumber: 100,
+      },
+    ]);
+
+    render(
+      await CollectionMarketPage({
+        collectionId: "random-walk",
+        searchParams: Promise.resolve({}),
+      }),
+    );
+
+    const soldCard = screen.getByRole("link", { name: /^sold/i });
+
+    expect(soldCard).toHaveTextContent("2");
+    expect(soldCard).toHaveTextContent("2.50 ETH lifetime volume");
+    expect(soldCard).toHaveTextContent("≈ $5,000");
+    expect(soldCard).toHaveAttribute("href", "/token/random-walk/9");
   });
 
   it("shows a linked never-anchored supply stat when the anchor scan resolves", async () => {

@@ -91,6 +91,17 @@ export const marketplaceAbi = [
   },
 ] as const;
 
+/** Emitted by the marketplace contract on every completed sale. */
+export const itemBoughtEvent = {
+  type: "event",
+  name: "ItemBought",
+  inputs: [
+    { name: "offerId", type: "uint256", indexed: true },
+    { name: "seller", type: "address", indexed: true },
+    { name: "buyer", type: "address", indexed: true },
+  ],
+} as const;
+
 export const erc721Abi = [
   {
     type: "function",

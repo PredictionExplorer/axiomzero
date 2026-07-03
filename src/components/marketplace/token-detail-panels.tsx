@@ -3,7 +3,9 @@ import type { ReactNode } from "react";
 import type {
   Collection,
   MarketOffer,
+  MarketSale,
   MarketToken,
+  SalesSummary,
 } from "@/lib/marketplace/types";
 import { anchorStatusLabel } from "@/components/marketplace/anchor-status-pill";
 import { PriceSparkline } from "@/components/marketplace/price-sparkline";
@@ -21,7 +23,12 @@ import {
 } from "@/lib/marketplace/token-detail";
 import { formatEthWithUsd } from "@/lib/pricing/eth-usd";
 import { sameAddress } from "@/lib/marketplace/trading-actions";
-import { formatDate, formatEth, shortenAddress } from "@/lib/utils";
+import {
+  formatDate,
+  formatEth,
+  formatRelativeTime,
+  shortenAddress,
+} from "@/lib/utils";
 
 function arbiscanAddressUrl(address: string) {
   return `https://arbiscan.io/address/${address}`;
@@ -55,6 +62,7 @@ export function TokenMarketPanel({
   highestBid,
   offers,
   usdPerEth,
+  lastSale,
 }: {
   collection: Collection;
   token: MarketToken;
@@ -62,9 +70,13 @@ export function TokenMarketPanel({
   highestBid?: MarketOffer;
   offers: MarketOffer[];
   usdPerEth?: number;
+  lastSale?: MarketSale;
 }) {
   const sellOffers = sortOffersForDisplay(offers, "sell");
   const buyOffers = sortOffersForDisplay(offers, "buy");
+  const lastSaleAgo = lastSale?.soldAt
+    ? formatRelativeTime(lastSale.soldAt)
+    : undefined;
 
   return (
     <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
@@ -95,6 +107,17 @@ export function TokenMarketPanel({
               termKey="topBid"
               value={highestBid ? formatEth(highestBid.priceEth) : "No bids"}
             />
+            {lastSale ? (
+              <MarketStat
+                label="Last sale"
+                termKey="lastSale"
+                value={
+                  lastSaleAgo
+                    ? `${formatEth(lastSale.priceEth)} · ${lastSaleAgo}`
+                    : formatEth(lastSale.priceEth)
+                }
+              />
+            ) : null}
           </dl>
         </section>
 
@@ -137,7 +160,13 @@ export function TokenMarketPanel({
   );
 }
 
-export function TokenHistoryPanel({ token }: { token: MarketToken }) {
+export function TokenHistoryPanel({
+  token,
+  sales,
+}: {
+  token: MarketToken;
+  sales?: SalesSummary;
+}) {
   const records = formatHistoryRecords(token.tokenHistory);
 
   return (
@@ -156,9 +185,16 @@ export function TokenHistoryPanel({ token }: { token: MarketToken }) {
             first.
           </p>
         </div>
-        <p className="text-sm text-bone/70">
-          {records.length.toLocaleString("en-US")} records
-        </p>
+        <div className="text-right text-sm text-bone/70">
+          <p>{records.length.toLocaleString("en-US")} records</p>
+          {sales?.count ? (
+            <p className="mt-1 text-chartreuse">
+              {sales.count.toLocaleString("en-US")} marketplace sale
+              {sales.count === 1 ? "" : "s"} · {formatEth(sales.volumeEth)}{" "}
+              lifetime volume
+            </p>
+          ) : null}
+        </div>
       </div>
 
       <PriceSparkline records={records} />

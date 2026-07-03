@@ -20,4 +20,10 @@ describe("formatFloorDelta", () => {
     expect(formatFloorDelta(1.5, 1)).toBe("+50% vs floor");
     expect(formatFloorDelta(0.9, 1)).toBe("-10% vs floor");
   });
+
+  it("switches to a multiplier for extreme premiums", () => {
+    expect(formatFloorDelta(5.5, 1)).toBe("5.5x floor");
+    expect(formatFloorDelta(300, 0.1)).toBe("3000x floor");
+    expect(formatFloorDelta(4.9, 1)).toBe("+390% vs floor");
+  });
 });

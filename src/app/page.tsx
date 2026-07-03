@@ -8,6 +8,7 @@ import { FeaturedArtworksRail } from "@/components/home/featured-artworks-rail";
 import { HomeFaqSection } from "@/components/home/home-faq-section";
 import { HomeHero } from "@/components/home/home-hero";
 import { HowItWorksSection } from "@/components/home/how-it-works-section";
+import { MarketActivitySection } from "@/components/home/market-activity-section";
 import { MarketPulseStrip } from "@/components/home/market-pulse-strip";
 import { ButtonLink } from "@/components/ui/button";
 import { Reveal } from "@/components/ui/reveal";
@@ -29,6 +30,7 @@ import {
   tokenPath,
 } from "@/lib/marketplace/routes";
 import type { Collection, MarketOffer } from "@/lib/marketplace/types";
+import { getEthUsdPrice } from "@/lib/pricing/eth-usd";
 import { buildPageMetadata } from "@/lib/seo/metadata";
 import { formatEth, formatTokenId } from "@/lib/utils";
 
@@ -134,9 +136,10 @@ function CollectionCard({ pulse }: { pulse: HomeCollectionPulse }) {
 }
 
 export default async function Home() {
-  const [heroArtworks, overview] = await Promise.all([
+  const [heroArtworks, overview, usdPerEth] = await Promise.all([
     getHomeHeroArtworks(),
     getHomeMarketOverview(),
+    getEthUsdPrice().catch(() => undefined),
   ]);
   const showcases = pickArtSystemShowcases(heroArtworks);
 
@@ -144,6 +147,7 @@ export default async function Home() {
     <div className="overflow-hidden">
       <HomeHero artworks={heroArtworks} />
       <MarketPulseStrip pulses={overview.pulses} />
+      <MarketActivitySection activity={overview.activity} usdPerEth={usdPerEth} />
       <HowItWorksSection />
 
       <section

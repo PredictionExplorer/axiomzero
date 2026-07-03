@@ -22,6 +22,16 @@ vi.mock("@/lib/marketplace/home-data", async (importOriginal) => {
   };
 });
 
+vi.mock("@/lib/pricing/eth-usd", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/pricing/eth-usd")>();
+
+  return {
+    ...actual,
+    getEthUsdPrice: vi.fn().mockResolvedValue(2000),
+  };
+});
+
 import Home from "@/app/page";
 
 function pulse(
@@ -129,6 +139,76 @@ describe("Home", () => {
     expect(
       screen.getByRole("heading", { name: /live works on the market/i }),
     ).toBeInTheDocument();
+  });
+
+  it("shows the on-chain activity band when sales data is available", async () => {
+    homeDataMocks.getHomeHeroArtworks.mockResolvedValue([]);
+    homeDataMocks.getHomeMarketOverview.mockResolvedValue({
+      pulses: [
+        pulse({ collectionId: "random-walk", shortName: "Random Walk" }),
+        pulse({
+          collectionId: "cosmic-signature",
+          shortName: "Cosmic Signature",
+        }),
+      ],
+      featured: [],
+      activity: {
+        totalSales: 169,
+        totalVolumeEth: 12.5,
+        activeOrders: 8,
+        perCollection: [
+          {
+            collectionId: "random-walk",
+            shortName: "Random Walk",
+            sales: { count: 150, volumeEth: 10 },
+          },
+        ],
+        recentSales: [
+          {
+            collectionId: "random-walk",
+            tokenId: 77,
+            offerId: 448,
+            priceEth: 0.4,
+            seller: "0x0000000000000000000000000000000000000011",
+            buyer: "0x0000000000000000000000000000000000000022",
+            blockNumber: 200,
+            name: "Random Walk #77",
+            artwork: { image: "/rw-77.png", alt: "Random Walk #77 artwork" },
+          },
+        ],
+      },
+    });
+
+    render(await Home());
+
+    expect(
+      screen.getByRole("heading", { name: /real trades, settled on-chain/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("169")).toBeInTheDocument();
+    expect(screen.getByText(/≈ \$25,000/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /random walk #77/i }),
+    ).toHaveAttribute("href", "/token/random-walk/77");
+  });
+
+  it("hides the activity band when sales data is unavailable", async () => {
+    homeDataMocks.getHomeHeroArtworks.mockResolvedValue([]);
+    homeDataMocks.getHomeMarketOverview.mockResolvedValue({
+      pulses: [
+        pulse({ collectionId: "random-walk", shortName: "Random Walk" }),
+        pulse({
+          collectionId: "cosmic-signature",
+          shortName: "Cosmic Signature",
+        }),
+      ],
+      featured: [],
+    });
+
+    render(await Home());
+
+    expect(
+      screen.queryByRole("heading", { name: /real trades, settled on-chain/i }),
+    ).toBeNull();
   });
 
   it("guides newcomers with a how-it-works strip and a full FAQ link", async () => {

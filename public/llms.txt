@@ -37,6 +37,7 @@ Full FAQ with categories (getting started, buying and bidding, selling and listi
 - Cosmic Signature metadata is served from the Cosmic Signature NFT API.
 - Each token page shows the seed that deterministically generates the artwork.
 - Anchoring is a one-time action on cosmicsignature.com; a token can be anchored once, ever, and the anchor never resets. Axiom Zero labels every token as never anchored or anchored (read live from the Arbitrum anchoring contracts) and supports filtering collections by anchor status (?anchor=never or ?anchor=anchored).
+- Activity statistics (NFTs sold, ETH volume, latest sales, last sale per token) are reconstructed live from the marketplace contract's on-chain ItemBought sale events and shown on the home page, collection pages, and token detail pages.
 
 ## Contracts
 

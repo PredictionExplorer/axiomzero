@@ -43,7 +43,11 @@ export function MarketPulseStrip({
                   </Link>
                 </div>
 
-                <div className="mt-5 grid gap-3 sm:grid-cols-4">
+                <div
+                  className={`mt-5 grid gap-3 ${
+                    pulse.sales ? "sm:grid-cols-3" : "sm:grid-cols-4"
+                  }`}
+                >
                   <PulseStat
                     label="Floor"
                     termKey="floorPrice"
@@ -90,6 +94,21 @@ export function MarketPulseStrip({
                     tooltipAlign="end"
                     value={String(pulse.stats.buyOffers)}
                   />
+                  {pulse.sales ? (
+                    <PulseStat
+                      label="Sold"
+                      termKey="sold"
+                      value={pulse.sales.count.toLocaleString("en-US")}
+                    />
+                  ) : null}
+                  {pulse.sales ? (
+                    <PulseStat
+                      label="Volume"
+                      termKey="volume"
+                      tooltipAlign="end"
+                      value={formatEth(pulse.sales.volumeEth)}
+                    />
+                  ) : null}
                 </div>
               </article>
             </Reveal>

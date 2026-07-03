@@ -141,4 +141,77 @@ describe("token detail panels", () => {
     expect(screen.getByText("Unlisted")).toBeInTheDocument();
     expect(screen.queryByText(/≈/)).toBeNull();
   });
+
+  it("shows the last on-chain sale with relative time when available", () => {
+    render(
+      <TokenMarketPanel
+        collection={requireCollection("random-walk")}
+        token={token()}
+        activeSellOffer={undefined}
+        highestBid={undefined}
+        offers={[]}
+        usdPerEth={undefined}
+        lastSale={{
+          collectionId: "random-walk",
+          tokenId: 7,
+          offerId: 12,
+          priceEth: 0.8,
+          seller: "0x0000000000000000000000000000000000000011",
+          buyer: "0x0000000000000000000000000000000000000022",
+          blockNumber: 100,
+          soldAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Last sale")).toBeInTheDocument();
+    expect(screen.getByText("0.8000 ETH · 5h ago")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /about last sale/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("omits the last sale stat when the token never sold", () => {
+    render(
+      <TokenMarketPanel
+        collection={requireCollection("random-walk")}
+        token={token()}
+        activeSellOffer={undefined}
+        highestBid={undefined}
+        offers={[]}
+        usdPerEth={undefined}
+      />,
+    );
+
+    expect(screen.queryByText("Last sale")).toBeNull();
+  });
+
+  it("summarizes marketplace sales in the history header", () => {
+    render(
+      <TokenHistoryPanel
+        token={token()}
+        sales={{
+          count: 3,
+          volumeEth: 2.4,
+          lastSale: undefined,
+          topSale: undefined,
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByText(/3 marketplace sales · 2\.40 ETH lifetime volume/i),
+    ).toBeInTheDocument();
+  });
+
+  it("omits the sales summary when the token has no marketplace sales", () => {
+    render(
+      <TokenHistoryPanel
+        token={token()}
+        sales={{ count: 0, volumeEth: 0 }}
+      />,
+    );
+
+    expect(screen.queryByText(/marketplace sale/i)).toBeNull();
+  });
 });
