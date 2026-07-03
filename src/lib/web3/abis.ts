@@ -29,6 +29,13 @@ export const marketplaceAbi = [
   },
   {
     type: "function",
+    name: "acceptBuyOffer",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "offerId", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
     name: "cancelSellOffer",
     stateMutability: "nonpayable",
     inputs: [{ name: "offerId", type: "uint256" }],
@@ -149,5 +156,26 @@ export const erc721Abi = [
       { name: "index", type: "uint256" },
     ],
     outputs: [{ name: "tokenId", type: "uint256" }],
+  },
+] as const;
+
+/**
+ * Cosmic Signature anchoring wallets (one per collection). usedNfts is 1 once
+ * a token's one-time anchor has been used, and never resets after release.
+ */
+export const anchoringWalletAbi = [
+  {
+    type: "function",
+    name: "usedNfts",
+    stateMutability: "view",
+    inputs: [{ name: "nftId", type: "uint256" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "numStakedNfts",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
   },
 ] as const;

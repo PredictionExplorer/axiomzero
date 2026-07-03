@@ -193,4 +193,51 @@ describe("TokenPage", () => {
       screen.getByRole("tab", { name: /collector notes/i }),
     ).toHaveAttribute("aria-selected", "true");
   });
+
+  it("shows the anchor status pill and watch toggle for never-anchored tokens", async () => {
+    queryMocks.getTokenMarket.mockResolvedValueOnce({
+      token: token({ anchored: false }),
+      offers: [],
+    });
+    collectionIndexMocks.getCollectionTokenIds.mockResolvedValueOnce([19]);
+
+    render(
+      await TokenPage({
+        params: Promise.resolve({
+          collectionId: "cosmic-signature",
+          tokenId: "19",
+        }),
+        searchParams: Promise.resolve({}),
+      }),
+    );
+
+    expect(screen.getByText("Never anchored")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /add token 19 to your watchlist/i }),
+    ).toBeVisible();
+  });
+
+  it("labels tokens held by the anchoring vault", async () => {
+    queryMocks.getTokenMarket.mockResolvedValueOnce({
+      token: token({
+        anchored: true,
+        owner: "0x6308A405B4FF1eA890870Efe2a6D036750B81F7C",
+      }),
+      offers: [],
+    });
+    collectionIndexMocks.getCollectionTokenIds.mockResolvedValueOnce([19]);
+
+    render(
+      await TokenPage({
+        params: Promise.resolve({
+          collectionId: "cosmic-signature",
+          tokenId: "19",
+        }),
+        searchParams: Promise.resolve({}),
+      }),
+    );
+
+    expect(screen.getByText("Anchored now")).toBeVisible();
+    expect(screen.getByText("Anchoring vault")).toBeVisible();
+  });
 });

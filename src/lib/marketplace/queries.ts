@@ -1,5 +1,6 @@
 import { collections, requireCollection } from "@/config/collections";
 import type {
+  AnchorStatusFilter,
   CollectionId,
   MarketOffer,
   MarketToken,
@@ -10,6 +11,11 @@ import type {
   SortKey,
   TokenMarketSummary,
 } from "@/lib/marketplace/types";
+import {
+  getAnchoredTokenIdSet,
+  getAnchorStatusForTokens,
+  getTokenAnchorStatus,
+} from "@/lib/marketplace/anchoring-live";
 import {
   fetchRandomWalkMetadata,
   fetchRandomWalkTokenDetail,
@@ -27,6 +33,7 @@ const collectionIds = new Set(collections.map((collection) => collection.id));
 const offerKinds = new Set(["buy", "sell", "all"]);
 const marketplaceViews = new Set(["discover", "listings", "top-bids"]);
 const sortKeys = new Set(["price-asc", "price-desc", "recent"]);
+const anchorFilters = new Set(["never", "anchored"]);
 const DEFAULT_TOKEN_PAGE = 1;
 const DEFAULT_TOKEN_PAGE_SIZE = 12;
 const MAX_TOKEN_PAGE_SIZE = 24;
@@ -84,6 +91,7 @@ export function parseMarketplaceSearchParams(
   const kind = firstValue(params.kind);
   const view = firstValue(params.view);
   const sort = firstValue(params.sort);
+  const anchor = firstValue(params.anchor);
   const parsedView = marketplaceViews.has(view as MarketplaceView)
     ? (view as MarketplaceView)
     : "discover";
@@ -123,7 +131,43 @@ export function parseMarketplaceSearchParams(
       max: MAX_TOKEN_PAGE_SIZE,
     }),
     listedOnly: parseBoolean(params.listedOnly),
+    anchor:
+      anchor && anchorFilters.has(anchor)
+        ? (anchor as AnchorStatusFilter)
+        : undefined,
   };
+}
+
+/**
+ * Anchor filtering degrades gracefully: when a collection's anchor set could
+ * not be read, its tokens are kept rather than hiding the whole collection.
+ */
+function matchesAnchorFilter(
+  anchor: AnchorStatusFilter,
+  anchoredSet: Set<number> | undefined,
+  tokenId: number,
+) {
+  if (!anchoredSet) {
+    return true;
+  }
+
+  return anchor === "never"
+    ? !anchoredSet.has(tokenId)
+    : anchoredSet.has(tokenId);
+}
+
+async function anchoredSetsForCollections(requestedIds: CollectionId[]) {
+  const entries = await Promise.all(
+    requestedIds.map(
+      async (collectionId) =>
+        [
+          collectionId,
+          await getAnchoredTokenIdSet(collectionId).catch(() => undefined),
+        ] as const,
+    ),
+  );
+
+  return new Map(entries);
 }
 
 export function filterOffers(
@@ -272,8 +316,22 @@ export async function getMarketplaceOffers(search: MarketplaceSearchParams) {
       ),
     )
   ).flat();
+  const filtered = sortOffers(filterOffers(offers, search), search.sort);
+  const anchor = search.anchor;
 
-  return sortOffers(filterOffers(offers, search), search.sort);
+  if (!anchor) {
+    return filtered;
+  }
+
+  const anchoredSets = await anchoredSetsForCollections(requestedCollections);
+
+  return filtered.filter((offer) =>
+    matchesAnchorFilter(
+      anchor,
+      anchoredSets.get(offer.collectionId),
+      offer.tokenId,
+    ),
+  );
 }
 
 export function getMarketplaceStats(
@@ -347,24 +405,42 @@ async function tokenCandidates(search: MarketplaceSearchParams) {
       tokenIds: await mintedTokenIdsForCollection(collection.id),
     })),
   );
+  const candidates = collectionTokenIds.flatMap(
+    ({ collectionId, tokenIds }) => {
+      if (tokenQuery !== undefined) {
+        return tokenIds.includes(tokenQuery)
+          ? [{ collectionId, tokenId: tokenQuery }]
+          : [];
+      }
 
-  return collectionTokenIds.flatMap(({ collectionId, tokenIds }) => {
-    if (tokenQuery !== undefined) {
-      return tokenIds.includes(tokenQuery)
-        ? [{ collectionId, tokenId: tokenQuery }]
-        : [];
-    }
+      return tokenIds.map((tokenId) => ({
+        collectionId,
+        tokenId,
+      }));
+    },
+  );
+  const anchor = search.anchor;
 
-    return tokenIds.map((tokenId) => ({
-      collectionId,
-      tokenId,
-    }));
-  });
+  if (!anchor) {
+    return candidates;
+  }
+
+  const anchoredSets = await anchoredSetsForCollections(
+    requestedCollections.map((collection) => collection.id),
+  );
+
+  return candidates.filter(({ collectionId, tokenId }) =>
+    matchesAnchorFilter(anchor, anchoredSets.get(collectionId), tokenId),
+  );
 }
 
 async function loadTokenSummaryPage(
   refs: Array<{ collectionId: CollectionId; tokenId: number }>,
 ) {
+  // One batched anchor read for the page seeds the per-token cache before the
+  // per-token stamping inside getTokenMarket runs.
+  await getAnchorStatusForTokens(refs).catch(() => undefined);
+
   return (
     await Promise.all(
       refs.map(async ({ collectionId, tokenId }) => {
@@ -398,6 +474,7 @@ async function listedTokenPage(
     query: search.query,
     min: search.min,
     max: search.max,
+    anchor: search.anchor,
   });
   const seen = new Set<string>();
   const tokenRefs: Array<{ collectionId: CollectionId; tokenId: number }> = [];
@@ -542,6 +619,22 @@ export async function getTokenMarket(
   collectionId: CollectionId,
   tokenId: number,
 ) {
+  const [market, anchored] = await Promise.all([
+    loadTokenMarket(collectionId, tokenId),
+    getTokenAnchorStatus(collectionId, tokenId).catch(() => undefined),
+  ]);
+
+  if (anchored !== undefined) {
+    market.token = { ...market.token, anchored };
+  }
+
+  return market;
+}
+
+async function loadTokenMarket(
+  collectionId: CollectionId,
+  tokenId: number,
+): Promise<{ token: MarketToken; offers: MarketOffer[] }> {
   await assertMintedToken(collectionId, tokenId);
 
   if (collectionId === "random-walk") {

@@ -14,7 +14,9 @@ import {
   getMarketplaceTokenPage,
   parseMarketplaceSearchParams,
 } from "@/lib/marketplace/queries";
+import { getAnchoredTokenIdSet } from "@/lib/marketplace/anchoring-live";
 import { getCollectionSupply } from "@/lib/marketplace/collection-index-live";
+import { getEthUsdPrice } from "@/lib/pricing/eth-usd";
 import { formatCollectionSupplyLabel } from "@/lib/marketplace/collection-supply";
 import { collectionMarketHref, collectionPath } from "@/lib/marketplace/routes";
 import {
@@ -61,7 +63,14 @@ export async function CollectionMarketPage({
     search.query === undefined &&
     search.min === undefined &&
     search.max === undefined;
-  const [visibleOffers, statsOffers, tokenPage, supply] = await Promise.all([
+  const [
+    visibleOffers,
+    statsOffers,
+    tokenPage,
+    supply,
+    anchoredTokenIds,
+    usdPerEth,
+  ] = await Promise.all([
     getMarketplaceOffers(offerSearch).catch(() => []),
     canReuseVisibleOffers
       ? Promise.resolve(undefined)
@@ -70,8 +79,21 @@ export async function CollectionMarketPage({
       ? getMarketplaceTokenPage(search).catch(() => undefined)
       : Promise.resolve(undefined),
     getCollectionSupply(collectionId).catch(() => undefined),
+    getAnchoredTokenIdSet(collectionId).catch(() => undefined),
+    getEthUsdPrice().catch(() => undefined),
   ]);
   const stats = getMarketplaceStats(statsOffers ?? visibleOffers);
+  const anchorSupply =
+    supply !== undefined && anchoredTokenIds
+      ? {
+          neverAnchoredCount: Math.max(0, supply - anchoredTokenIds.size),
+          href: collectionMarketHref({
+            collectionId,
+            search: { collection: collectionId, anchor: "never" },
+            view: "discover",
+          }),
+        }
+      : undefined;
   const heroArtwork =
     tokenPage?.items[0]?.token.artwork ??
     visibleOffers.find((offer) => offer.artwork)?.artwork;
@@ -152,7 +174,11 @@ export async function CollectionMarketPage({
       </div>
 
       <div className="mt-6">
-        <MarketplaceStatsGrid stats={stats} />
+        <MarketplaceStatsGrid
+          stats={stats}
+          anchorSupply={anchorSupply}
+          usdPerEth={usdPerEth}
+        />
       </div>
 
       {activeView === "discover" && tokenPage ? (
@@ -178,6 +204,8 @@ export async function CollectionMarketPage({
               <MarketplaceTokenCard
                 key={`${item.token.collectionId}-${item.token.tokenId}`}
                 item={item}
+                usdPerEth={usdPerEth}
+                floorPriceEth={stats.floorOffer?.priceEth}
               />
             ))}
           </div>
@@ -214,7 +242,11 @@ export async function CollectionMarketPage({
 
           <div className="mt-6 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
             {visibleOffers.map((offer) => (
-              <MarketplaceCard key={offer.id} offer={offer} />
+              <MarketplaceCard
+                key={offer.id}
+                offer={offer}
+                usdPerEth={usdPerEth}
+              />
             ))}
           </div>
         </section>

@@ -58,6 +58,9 @@ export function collectionMarketHref({
   if (search.listedOnly) {
     params.set("listedOnly", "1");
   }
+  if (search.anchor) {
+    params.set("anchor", search.anchor);
+  }
 
   if (resolvedView === "top-bids") {
     params.set("filter", "buy");

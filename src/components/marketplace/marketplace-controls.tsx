@@ -6,6 +6,7 @@ import {
   collectionMarketHref,
   collectionPath,
 } from "@/lib/marketplace/routes";
+import { GlossaryTip } from "@/components/ui/tooltip";
 
 const views = [
   {
@@ -82,7 +83,7 @@ export function MarketplaceControls({
         ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto]">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_auto]">
         <label className="space-y-2">
           <span className="text-xs uppercase tracking-[0.24em] text-bone/75">
             Token ID
@@ -111,6 +112,22 @@ export function MarketplaceControls({
             <option value="recent">Most recent</option>
           </select>
         </label>
+        <div className="space-y-2">
+          <span className="flex items-center gap-1.5 text-xs uppercase tracking-[0.24em] text-bone/75">
+            <label htmlFor="marketplace-anchor-filter">Anchor status</label>
+            <GlossaryTip termKey="anchored" side="bottom" align="start" />
+          </span>
+          <select
+            id="marketplace-anchor-filter"
+            name="anchor"
+            defaultValue={search.anchor ?? ""}
+            className="h-12 w-full rounded-2xl border border-ivory/10 bg-ink px-4 text-sm text-ivory outline-none transition focus:border-chartreuse"
+          >
+            <option value="">Any status</option>
+            <option value="never">Never anchored</option>
+            <option value="anchored">Anchored</option>
+          </select>
+        </div>
         <label className="space-y-2">
           <span className="text-xs uppercase tracking-[0.24em] text-bone/75">
             Min ETH
@@ -163,8 +180,9 @@ export function MarketplaceControls({
       </div>
 
       <p className="text-xs leading-5 text-bone/60">
-        Min and Max filter by the ETH price of active listings and bids. Leave
-        them empty to see everything.
+        Min and Max filter by the ETH price of active listings and bids. Anchor
+        status checks each token&apos;s one-time cosmicsignature.com anchor
+        on-chain. Leave filters empty to see everything.
       </p>
 
       {activeView === "discover" ? (

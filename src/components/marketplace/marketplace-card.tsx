@@ -3,6 +3,7 @@ import Image from "next/image";
 import { requireCollection } from "@/config/collections";
 import type { MarketOffer } from "@/lib/marketplace/types";
 import { tokenPath } from "@/lib/marketplace/routes";
+import { formatEthWithUsd } from "@/lib/pricing/eth-usd";
 import {
   formatDate,
   formatEth,
@@ -11,9 +12,16 @@ import {
 } from "@/lib/utils";
 import { ButtonLink } from "@/components/ui/button";
 
-export function MarketplaceCard({ offer }: { offer: MarketOffer }) {
+export function MarketplaceCard({
+  offer,
+  usdPerEth,
+}: {
+  offer: MarketOffer;
+  usdPerEth?: number;
+}) {
   const collection = requireCollection(offer.collectionId);
   const tokenName = `${collection.shortName} ${formatTokenId(offer.tokenId)}`;
+  const priceUsd = formatEthWithUsd(offer.priceEth, usdPerEth);
 
   return (
     <article className="group overflow-hidden rounded-[2rem] border border-ivory/10 bg-ivory/[0.045] shadow-[0_24px_90px_rgba(0,0,0,0.28)] transition duration-300 hover:-translate-y-1 hover:border-copper/35 hover:bg-ivory/[0.07]">
@@ -50,6 +58,9 @@ export function MarketplaceCard({ offer }: { offer: MarketOffer }) {
             <p className="mt-1 font-semibold text-chartreuse">
               {formatEth(offer.priceEth)}
             </p>
+            {priceUsd ? (
+              <p className="mt-1 text-xs text-bone/70">≈ {priceUsd}</p>
+            ) : null}
           </div>
           <div className="rounded-2xl bg-ink/48 p-3">
             <p className="text-bone/75">Maker</p>

@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { collections } from "@/config/collections";
 import { MyNftsPanel } from "@/components/marketplace/my-nfts-panel";
+import { WatchlistPanel } from "@/components/marketplace/watchlist-panel";
 import { buildPageMetadata } from "@/lib/seo/metadata";
 import { FAQ_PATH, MY_NFTS_PATH } from "@/lib/marketplace/routes";
 
@@ -52,6 +53,10 @@ export default function MyNftsPage() {
 
       <div className="mt-10">
         <MyNftsPanel collections={collections} />
+      </div>
+
+      <div className="mt-10">
+        <WatchlistPanel />
       </div>
     </div>
   );

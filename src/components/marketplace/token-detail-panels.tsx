@@ -5,6 +5,7 @@ import type {
   MarketOffer,
   MarketToken,
 } from "@/lib/marketplace/types";
+import { anchorStatusLabel } from "@/components/marketplace/anchor-status-pill";
 import { PriceSparkline } from "@/components/marketplace/price-sparkline";
 import { TokenActions } from "@/components/marketplace/token-actions";
 import { TokenShareActions } from "@/components/marketplace/token-share-actions";
@@ -19,7 +20,12 @@ import {
   visibleTokenTraits,
 } from "@/lib/marketplace/token-detail";
 import { formatEthWithUsd } from "@/lib/pricing/eth-usd";
+import { sameAddress } from "@/lib/marketplace/trading-actions";
 import { formatDate, formatEth, shortenAddress } from "@/lib/utils";
+
+function arbiscanAddressUrl(address: string) {
+  return `https://arbiscan.io/address/${address}`;
+}
 
 function PriceLabel({
   eth,
@@ -230,7 +236,21 @@ export function TokenCollectorNotesPanel({
         </p>
 
         <dl className="mt-6 grid gap-3 sm:grid-cols-2">
-          <MarketStat label="Owner" value={shortenAddress(token.owner, 6)} />
+          <MarketStat
+            label="Owner"
+            value={
+              <a
+                href={arbiscanAddressUrl(token.owner)}
+                target="_blank"
+                rel="noreferrer"
+                className="underline decoration-ivory/25 underline-offset-4 transition hover:text-chartreuse"
+              >
+                {sameAddress(token.owner, collection.anchoringWalletAddress)
+                  ? "Anchoring vault"
+                  : shortenAddress(token.owner, 6)}
+              </a>
+            }
+          />
           <MarketStat label={primaryTrait.label} value={primaryTrait.value} />
           <MarketStat
             label="Minted"
@@ -240,6 +260,21 @@ export function TokenCollectorNotesPanel({
           <MarketStat
             label="Collection"
             value={collection.supplyNoun.singular}
+          />
+          <MarketStat
+            label="Anchor status"
+            value={
+              token.anchored === undefined
+                ? "Unknown"
+                : anchorStatusLabel(
+                    token.anchored,
+                    sameAddress(
+                      token.owner,
+                      collection.anchoringWalletAddress,
+                    ),
+                  )
+            }
+            termKey="anchored"
           />
         </dl>
 
@@ -307,7 +342,7 @@ function MarketStat({
   termKey,
 }: {
   label: string;
-  value: string;
+  value: ReactNode;
   termKey?: GlossaryKey;
 }) {
   return (
@@ -379,7 +414,18 @@ function EmptyState({ children }: { children: ReactNode }) {
 }
 
 function formatMaker(address: string) {
-  return address === "0x0000000000000000000000000000000000000000"
-    ? "Unknown"
-    : shortenAddress(address);
+  if (address === "0x0000000000000000000000000000000000000000") {
+    return "Unknown";
+  }
+
+  return (
+    <a
+      href={arbiscanAddressUrl(address)}
+      target="_blank"
+      rel="noreferrer"
+      className="underline decoration-ivory/25 underline-offset-4 transition hover:text-chartreuse"
+    >
+      {shortenAddress(address)}
+    </a>
+  );
 }

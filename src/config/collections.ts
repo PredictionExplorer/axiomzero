@@ -20,6 +20,18 @@ const COSMIC_SIGNATURE_MARKETPLACE_ADDRESS =
     | `0x${string}`
     | undefined) ?? "0x47eF85Dfb775aCE0934fBa9EEd09D22e6eC0Cc08";
 
+// Cosmic Signature anchoring wallets track one-time anchor usage per token
+// (usedNfts). Addresses published at https://app.cosmicsignature.com/contracts
+const RANDOM_WALK_ANCHORING_WALLET_ADDRESS =
+  (process.env.NEXT_PUBLIC_RANDOM_WALK_ANCHORING_WALLET_ADDRESS as
+    | `0x${string}`
+    | undefined) ?? "0x5EB3396092841E6c5b0b51141699F6711E830529";
+
+const COSMIC_SIGNATURE_ANCHORING_WALLET_ADDRESS =
+  (process.env.NEXT_PUBLIC_COSMIC_SIGNATURE_ANCHORING_WALLET_ADDRESS as
+    | `0x${string}`
+    | undefined) ?? "0x6308A405B4FF1eA890870Efe2a6D036750B81F7C";
+
 const RANDOM_WALK_MAX_TOKEN_ID = Number(
   process.env.NEXT_PUBLIC_RANDOM_WALK_MAX_TOKEN_ID ?? 4085,
 );
@@ -40,6 +52,7 @@ export const collections = [
     artSystem: "Mathematics: stochastic paths",
     nftAddress: RANDOM_WALK_NFT_ADDRESS,
     marketplaceAddress: RANDOM_WALK_MARKETPLACE_ADDRESS,
+    anchoringWalletAddress: RANDOM_WALK_ANCHORING_WALLET_ADDRESS,
     externalUrl: "https://randomwalknft.com/",
     accent: "copper",
     supplyNoun: {
@@ -62,6 +75,7 @@ export const collections = [
     artSystem: "Algorithm: three-body physics",
     nftAddress: COSMIC_SIGNATURE_NFT_ADDRESS,
     marketplaceAddress: COSMIC_SIGNATURE_MARKETPLACE_ADDRESS,
+    anchoringWalletAddress: COSMIC_SIGNATURE_ANCHORING_WALLET_ADDRESS,
     externalUrl: "https://cosmicsignature.com/",
     accent: "chartreuse",
     supplyNoun: {

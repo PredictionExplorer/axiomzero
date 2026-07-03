@@ -74,4 +74,56 @@ describe("MarketplaceStatsGrid", () => {
     expect(screen.queryByRole("link", { name: /top bid/i })).toBeNull();
     expect(screen.getAllByText("N/A")).toHaveLength(2);
   });
+
+  it("links the never-anchored supply card to the anchor filter", () => {
+    render(
+      <MarketplaceStatsGrid
+        stats={{
+          totalOffers: 0,
+          sellListings: 0,
+          buyOffers: 0,
+          floorOffer: undefined,
+          topBidOffer: undefined,
+        }}
+        anchorSupply={{
+          neverAnchoredCount: 4_060,
+          href: "/random-walk?view=discover&anchor=never",
+        }}
+      />,
+    );
+
+    const card = screen.getByRole("link", { name: /never anchored/i });
+
+    expect(card).toHaveAttribute(
+      "href",
+      "/random-walk?view=discover&anchor=never",
+    );
+    expect(card).toHaveTextContent("4,060");
+  });
+
+  it("adds approximate USD context to floor and top bid when available", () => {
+    render(
+      <MarketplaceStatsGrid
+        stats={{
+          totalOffers: 2,
+          sellListings: 1,
+          buyOffers: 1,
+          floorOffer: marketOffer({ priceEth: 2 }),
+          topBidOffer: marketOffer({
+            id: "bid",
+            kind: "buy",
+            priceEth: 1,
+          }),
+        }}
+        usdPerEth={3000}
+      />,
+    );
+
+    expect(
+      screen.getByRole("link", { name: /floor price/i }),
+    ).toHaveTextContent("≈ $6,000");
+    expect(screen.getByRole("link", { name: /top bid/i })).toHaveTextContent(
+      "≈ $3,000",
+    );
+  });
 });

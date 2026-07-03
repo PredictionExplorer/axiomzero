@@ -69,6 +69,11 @@ export const GLOSSARY = {
     definition:
       "This token has no active sell offer. You can still place a bid the owner may accept.",
   },
+  anchored: {
+    term: "Anchor status",
+    definition:
+      "An NFT can be anchored on cosmicsignature.com exactly once, ever — the anchor never resets. Never-anchored tokens keep that option open and often carry a premium. Status is read live from Arbitrum.",
+  },
 } as const satisfies Record<string, GlossaryTerm>;
 
 export type GlossaryKey = keyof typeof GLOSSARY;

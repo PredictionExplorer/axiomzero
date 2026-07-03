@@ -150,6 +150,12 @@ export const FAQ_CATEGORIES: readonly FaqCategory[] = [
         answer:
           "Provenance is the recorded life of a token: its mint, transfers, and sales with prices where available. Axiom Zero shows it on each token page under the History tab, combining collection endpoints with on-chain marketplace data.",
       },
+      {
+        question: "What does anchored mean and why does it affect value?",
+        answer:
+          "Anchoring is a one-time action on cosmicsignature.com: a Random Walk or Cosmic Signature NFT can be anchored to the protocol exactly once, ever, and the anchor never resets even after it is released. A never-anchored token keeps that option open for its next owner, so collectors often pay a premium for it. Axiom Zero reads the status live from the anchoring contracts on Arbitrum, labels every token as never anchored or anchored, and lets you filter each collection by anchor status.",
+        featured: true,
+      },
     ],
   },
 ] as const;

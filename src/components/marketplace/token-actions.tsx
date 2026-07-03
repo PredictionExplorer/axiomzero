@@ -176,6 +176,17 @@ function TokenActionsInner({
         : [],
     [address, offers],
   );
+  const highestBid = useMemo(
+    () =>
+      [...offers]
+        .filter((offer) => offer.kind === "buy" && offer.offerId)
+        .sort((left, right) => right.priceEth - left.priceEth)[0],
+    [offers],
+  );
+  const acceptableBid =
+    isOwner && highestBid && !sameAddress(highestBid.maker, address)
+      ? highestBid
+      : undefined;
 
   const walletBlocker = !isConnected
     ? "Connect a wallet to activate trading controls."
@@ -304,6 +315,58 @@ function TokenActionsInner({
       functionName: "makeBuyOffer",
       args: [collection.nftAddress, BigInt(tokenId)],
       value,
+      ...prepared,
+    });
+  }
+
+  async function acceptHighestBid() {
+    if (!publicClient || !address) {
+      throw new Error("Connect your wallet to continue.");
+    }
+
+    if (!acceptableBid?.offerId) {
+      throw new Error("This bid is missing a live on-chain offer ID.");
+    }
+
+    if (!isOwner) {
+      throw new Error("Only the current token owner can accept a bid.");
+    }
+
+    if (!isApprovedForMarketplace) {
+      const approvalPrepared = await prepareContractWrite({
+        publicClient,
+        account: address,
+        address: collection.nftAddress,
+        abi: erc721Abi,
+        functionName: "setApprovalForAll",
+        args: [collection.marketplaceAddress, true],
+      });
+      const approvalHash = await writeContractAsync({
+        address: collection.nftAddress,
+        abi: erc721Abi,
+        functionName: "setApprovalForAll",
+        args: [collection.marketplaceAddress, true],
+        ...approvalPrepared,
+      });
+      toast.success("Approval submitted", { description: approvalHash });
+      await publicClient.waitForTransactionReceipt({ hash: approvalHash });
+      toast.success("Marketplace approval confirmed");
+    }
+
+    const prepared = await prepareContractWrite({
+      publicClient,
+      account: address,
+      address: collection.marketplaceAddress,
+      abi: marketplaceAbi,
+      functionName: "acceptBuyOffer",
+      args: [BigInt(acceptableBid.offerId)],
+    });
+
+    return writeContractAsync({
+      address: collection.marketplaceAddress,
+      abi: marketplaceAbi,
+      functionName: "acceptBuyOffer",
+      args: [BigInt(acceptableBid.offerId)],
       ...prepared,
     });
   }
@@ -442,6 +505,29 @@ function TokenActionsInner({
         </div>
       ) : null}
 
+      {acceptableBid ? (
+        <div className="mt-5 rounded-2xl border border-copper/25 bg-copper/10 p-4">
+          <p className="text-sm text-bone/78">Highest bid on your NFT</p>
+          <p className="mt-1 text-2xl font-semibold text-ivory">
+            {formatEth(acceptableBid.priceEth)}
+          </p>
+          <Button
+            className="mt-4 w-full"
+            disabled={Boolean(walletBlocker) || isPending}
+            onClick={() => void runTransaction(acceptHighestBid)}
+          >
+            {isApprovedForMarketplace
+              ? `Accept bid for ${formatEth(acceptableBid.priceEth)}`
+              : "Approve and accept bid"}
+          </Button>
+          <p className="mt-2 text-xs leading-5 text-bone/70">
+            Accepting settles instantly on-chain: the NFT transfers to the
+            bidder and the full amount lands in your wallet. Zero platform
+            fees.
+          </p>
+        </div>
+      ) : null}
+
       <label className="mt-5 block space-y-2">
         <span className="text-xs uppercase tracking-[0.24em] text-bone/75">
           ETH amount
@@ -454,6 +540,29 @@ function TokenActionsInner({
           className="h-12 w-full rounded-2xl border border-ivory/10 bg-ink px-4 text-sm text-ivory outline-none transition placeholder:text-bone/35 focus:border-chartreuse"
         />
       </label>
+
+      {highestBid || activeSellOffer ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {highestBid ? (
+            <button
+              type="button"
+              onClick={() => setPrice(String(highestBid.priceEth))}
+              className="rounded-full border border-ivory/15 bg-ivory/[0.05] px-3 py-1.5 text-xs font-semibold text-bone transition hover:border-chartreuse/40 hover:text-chartreuse focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-chartreuse"
+            >
+              Top bid · {formatEth(highestBid.priceEth)}
+            </button>
+          ) : null}
+          {activeSellOffer ? (
+            <button
+              type="button"
+              onClick={() => setPrice(String(activeSellOffer.priceEth))}
+              className="rounded-full border border-ivory/15 bg-ivory/[0.05] px-3 py-1.5 text-xs font-semibold text-bone transition hover:border-chartreuse/40 hover:text-chartreuse focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-chartreuse"
+            >
+              Listing · {formatEth(activeSellOffer.priceEth)}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <Button

@@ -6,6 +6,12 @@ export type SortKey = "price-asc" | "price-desc" | "recent";
 
 export type MarketplaceView = "discover" | "listings" | "top-bids";
 
+/**
+ * Anchor status filter: "never" keeps tokens that were never anchored on
+ * cosmicsignature.com, "anchored" keeps tokens whose one-time anchor is used.
+ */
+export type AnchorStatusFilter = "never" | "anchored";
+
 export type Collection = {
   id: CollectionId;
   name: string;
@@ -14,6 +20,11 @@ export type Collection = {
   artSystem: string;
   nftAddress: `0x${string}`;
   marketplaceAddress: `0x${string}`;
+  /**
+   * Cosmic Signature anchoring wallet that tracks the collection's one-time
+   * anchor usage on-chain (usedNfts mapping).
+   */
+  anchoringWalletAddress: `0x${string}`;
   externalUrl: string;
   accent: string;
   supplyNoun: {
@@ -80,6 +91,11 @@ export type MarketToken = {
   rating?: number;
   mintedAt?: string;
   tokenHistory?: TokenHistoryRecord[];
+  /**
+   * Whether this token's one-time cosmicsignature.com anchor has been used.
+   * Undefined when the on-chain anchoring status could not be read.
+   */
+  anchored?: boolean;
 };
 
 export type MarketplaceSearchParams = {
@@ -93,6 +109,7 @@ export type MarketplaceSearchParams = {
   page?: number;
   pageSize?: number;
   listedOnly?: boolean;
+  anchor?: AnchorStatusFilter;
 };
 
 export type MarketplaceStats = {

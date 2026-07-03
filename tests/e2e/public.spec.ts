@@ -56,6 +56,21 @@ test("collection market preserves filters from the URL", async ({ page }) => {
   await expect(page).toHaveURL(/filter=buy/);
 });
 
+test("anchor status filter is URL-driven and survives view switches", async ({
+  page,
+}) => {
+  await page.goto("/random-walk?anchor=never");
+
+  const anchorSelect = page.getByRole("combobox", { name: /anchor status/i });
+  await expect(anchorSelect).toHaveValue("never");
+
+  await page.getByRole("link", { name: /^listings/i }).click();
+  await expect(page).toHaveURL(/anchor=never/);
+  await expect(
+    page.getByRole("combobox", { name: /anchor status/i }),
+  ).toHaveValue("never");
+});
+
 test("faq page answers questions via accordions and glossary", async ({
   page,
 }) => {

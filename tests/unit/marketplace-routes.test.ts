@@ -53,4 +53,32 @@ describe("marketplace route helpers", () => {
       }),
     ).toBe("/random-walk?view=discover&pageSize=24&listedOnly=1");
   });
+
+  it("preserves the anchor status filter across views and pagination", () => {
+    expect(
+      collectionMarketHref({
+        collectionId: "random-walk",
+        search: {
+          collection: "random-walk",
+          view: "discover",
+          anchor: "never",
+        },
+        page: 3,
+      }),
+    ).toBe("/random-walk?view=discover&page=3&anchor=never");
+
+    expect(
+      collectionMarketHref({
+        collectionId: "cosmic-signature",
+        search: {
+          collection: "cosmic-signature",
+          view: "discover",
+          anchor: "anchored",
+        },
+        view: "listings",
+      }),
+    ).toBe(
+      "/cosmic-signature?view=listings&anchor=anchored&filter=sell&sort=price-asc",
+    );
+  });
 });

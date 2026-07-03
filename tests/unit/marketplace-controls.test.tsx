@@ -49,4 +49,29 @@ describe("MarketplaceControls", () => {
       "/random-walk?view=top-bids&filter=buy&sort=price-desc",
     );
   });
+
+  it("offers an anchor status filter that reflects the current search", () => {
+    render(
+      <MarketplaceControls
+        collectionId="random-walk"
+        search={{
+          collection: "random-walk",
+          view: "discover",
+          anchor: "never",
+        }}
+        totalOffers={4}
+      />,
+    );
+
+    const select = screen.getByRole("combobox", { name: /anchor status/i });
+
+    expect(select).toHaveValue("never");
+    expect(select).toHaveAttribute("name", "anchor");
+    expect(
+      screen.getByRole("option", { name: /never anchored/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /^anchored$/i }),
+    ).toBeInTheDocument();
+  });
 });

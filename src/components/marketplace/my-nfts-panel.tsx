@@ -13,6 +13,7 @@ import {
 import { arbitrum } from "wagmi/chains";
 import { toast } from "sonner";
 
+import { AnchorStatusPill } from "@/components/marketplace/anchor-status-pill";
 import { ConnectWalletButton } from "@/components/wallet/connect-wallet-button";
 import { Button } from "@/components/ui/button";
 import { TokenCardSkeleton } from "@/components/ui/skeleton";
@@ -409,6 +410,42 @@ export function MyNftsPanel({
     }
   }, [isConnected, scanWallet]);
 
+  async function ensureMarketplaceApproval(collection: CollectionScanConfig) {
+    if (!address || !publicClient || !walletPublicClient) {
+      throw new Error("Connect your wallet to continue.");
+    }
+
+    const approved = (await publicClient.readContract({
+      address: collection.nftAddress,
+      abi: erc721Abi,
+      functionName: "isApprovedForAll",
+      args: [address, collection.marketplaceAddress],
+    })) as boolean;
+
+    if (approved) {
+      return;
+    }
+
+    const approvalPrepared = await prepareContractWrite({
+      publicClient: walletPublicClient,
+      account: address,
+      address: collection.nftAddress,
+      abi: erc721Abi,
+      functionName: "setApprovalForAll",
+      args: [collection.marketplaceAddress, true],
+    });
+    const approvalHash = await writeContractAsync({
+      address: collection.nftAddress,
+      abi: erc721Abi,
+      functionName: "setApprovalForAll",
+      args: [collection.marketplaceAddress, true],
+      ...approvalPrepared,
+    });
+    toast.success("Approval submitted", { description: approvalHash });
+    await publicClient.waitForTransactionReceipt?.({ hash: approvalHash });
+    toast.success("Marketplace approval confirmed");
+  }
+
   async function listToken(item: OwnerScanItem) {
     const key = tokenKey(item.token.collectionId, item.token.tokenId);
     const price = prices[key];
@@ -436,33 +473,7 @@ export function MyNftsPanel({
         throw new Error("Only the current token owner can list this NFT.");
       }
 
-      const approved = (await publicClient.readContract({
-        address: item.collection.nftAddress,
-        abi: erc721Abi,
-        functionName: "isApprovedForAll",
-        args: [address, item.collection.marketplaceAddress],
-      })) as boolean;
-
-      if (!approved) {
-        const approvalPrepared = await prepareContractWrite({
-          publicClient: walletPublicClient,
-          account: address,
-          address: item.collection.nftAddress,
-          abi: erc721Abi,
-          functionName: "setApprovalForAll",
-          args: [item.collection.marketplaceAddress, true],
-        });
-        const approvalHash = await writeContractAsync({
-          address: item.collection.nftAddress,
-          abi: erc721Abi,
-          functionName: "setApprovalForAll",
-          args: [item.collection.marketplaceAddress, true],
-          ...approvalPrepared,
-        });
-        toast.success("Approval submitted", { description: approvalHash });
-        await publicClient.waitForTransactionReceipt?.({ hash: approvalHash });
-        toast.success("Marketplace approval confirmed");
-      }
+      await ensureMarketplaceApproval(item.collection);
 
       const value = parseEther(price);
       const prepared = await prepareContractWrite({
@@ -491,6 +502,106 @@ export function MyNftsPanel({
         description:
           listError instanceof Error
             ? listError.message
+            : "Review your wallet and try again.",
+      });
+    } finally {
+      setPendingKey(undefined);
+    }
+  }
+
+  async function acceptBid(item: OwnerScanItem) {
+    const key = tokenKey(item.token.collectionId, item.token.tokenId);
+    const bid = item.highestBid;
+
+    try {
+      setPendingKey(key);
+      if (!address || !publicClient || !walletPublicClient) {
+        throw new Error("Connect your wallet to accept this bid.");
+      }
+      if (!bid?.offerId) {
+        throw new Error("This bid is missing a live on-chain offer ID.");
+      }
+      if (!isCorrectChain) {
+        await switchChainAsync({ chainId: arbitrum.id });
+      }
+
+      await ensureMarketplaceApproval(item.collection);
+
+      const prepared = await prepareContractWrite({
+        publicClient: walletPublicClient,
+        account: address,
+        address: item.collection.marketplaceAddress,
+        abi: marketplaceAbi,
+        functionName: "acceptBuyOffer",
+        args: [BigInt(bid.offerId)],
+      });
+      const hash = await writeContractAsync({
+        address: item.collection.marketplaceAddress,
+        abi: marketplaceAbi,
+        functionName: "acceptBuyOffer",
+        args: [BigInt(bid.offerId)],
+        ...prepared,
+      });
+
+      toast.success("Bid acceptance submitted", { description: hash });
+      await publicClient.waitForTransactionReceipt?.({ hash });
+      toast.success("Bid accepted");
+      router.refresh();
+      await scanWallet();
+    } catch (acceptError) {
+      toast.error("Accepting the bid failed", {
+        description:
+          acceptError instanceof Error
+            ? acceptError.message
+            : "Review your wallet and try again.",
+      });
+    } finally {
+      setPendingKey(undefined);
+    }
+  }
+
+  async function cancelListing(item: OwnerScanItem) {
+    const key = tokenKey(item.token.collectionId, item.token.tokenId);
+    const listing = item.activeSellOffer;
+
+    try {
+      setPendingKey(key);
+      if (!address || !publicClient || !walletPublicClient) {
+        throw new Error("Connect your wallet to cancel this listing.");
+      }
+      if (!listing?.offerId) {
+        throw new Error("This listing is missing a live on-chain offer ID.");
+      }
+      if (!isCorrectChain) {
+        await switchChainAsync({ chainId: arbitrum.id });
+      }
+
+      const prepared = await prepareContractWrite({
+        publicClient: walletPublicClient,
+        account: address,
+        address: item.collection.marketplaceAddress,
+        abi: marketplaceAbi,
+        functionName: "cancelSellOffer",
+        args: [BigInt(listing.offerId)],
+      });
+      const hash = await writeContractAsync({
+        address: item.collection.marketplaceAddress,
+        abi: marketplaceAbi,
+        functionName: "cancelSellOffer",
+        args: [BigInt(listing.offerId)],
+        ...prepared,
+      });
+
+      toast.success("Cancellation submitted", { description: hash });
+      await publicClient.waitForTransactionReceipt?.({ hash });
+      toast.success("Listing cancelled");
+      router.refresh();
+      await scanWallet();
+    } catch (cancelError) {
+      toast.error("Cancelling the listing failed", {
+        description:
+          cancelError instanceof Error
+            ? cancelError.message
             : "Review your wallet and try again.",
       });
     } finally {
@@ -588,9 +699,9 @@ export function MyNftsPanel({
             {alertCount} owned NFT{alertCount === 1 ? " has" : "s have"} active
             bids.
           </span>{" "}
-          Open the token detail to review the full order book. This app can
-          notify you while connected; persistent email or push alerts need a
-          backend/indexer.
+          Accept a bid directly from its card below — the ETH settles into
+          your wallet in the same transaction — or open the token detail to
+          review the full order book.
         </div>
       ) : null}
 
@@ -601,6 +712,16 @@ export function MyNftsPanel({
             ))
           : ownedItems.map((item) => {
           const key = tokenKey(item.token.collectionId, item.token.tokenId);
+          const acceptableBid =
+            item.highestBid?.offerId &&
+            !sameAddress(item.highestBid.maker, address)
+              ? item.highestBid
+              : undefined;
+          const ownListing =
+            item.activeSellOffer?.offerId &&
+            sameAddress(item.activeSellOffer.maker, address)
+              ? item.activeSellOffer
+              : undefined;
 
           return (
             <article
@@ -623,6 +744,10 @@ export function MyNftsPanel({
                     Bid alert
                   </span>
                 ) : null}
+                <AnchorStatusPill
+                  anchored={item.token.anchored}
+                  className="absolute right-4 top-4"
+                />
               </a>
 
               <div className="space-y-4 p-5">
@@ -653,6 +778,34 @@ export function MyNftsPanel({
                     </p>
                   </div>
                 </div>
+
+                {acceptableBid || ownListing ? (
+                  <div className="grid gap-3">
+                    {acceptableBid ? (
+                      <Button
+                        type="button"
+                        disabled={
+                          pendingKey === key || !isConnected || !isCorrectChain
+                        }
+                        onClick={() => void acceptBid(item)}
+                      >
+                        Accept bid · {formatEth(acceptableBid.priceEth)}
+                      </Button>
+                    ) : null}
+                    {ownListing ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={
+                          pendingKey === key || !isConnected || !isCorrectChain
+                        }
+                        onClick={() => void cancelListing(item)}
+                      >
+                        Cancel listing · {formatEth(ownListing.priceEth)}
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <label className="block space-y-2">
                   <span className="text-xs uppercase tracking-[0.22em] text-bone/75">

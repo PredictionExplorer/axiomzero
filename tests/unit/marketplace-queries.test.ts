@@ -7,9 +7,15 @@ const contractMocks = vi.hoisted(() => ({
 const indexMocks = vi.hoisted(() => ({
   getCollectionTokenIds: vi.fn(),
 }));
+const anchoringMocks = vi.hoisted(() => ({
+  getAnchoredTokenIdSet: vi.fn(),
+  getAnchorStatusForTokens: vi.fn(),
+  getTokenAnchorStatus: vi.fn(),
+}));
 
 vi.mock("@/lib/marketplace/marketplace-contract-live", () => contractMocks);
 vi.mock("@/lib/marketplace/collection-index-live", () => indexMocks);
+vi.mock("@/lib/marketplace/anchoring-live", () => anchoringMocks);
 
 import {
   filterOffers,
@@ -57,6 +63,9 @@ describe("marketplace queries", () => {
     );
     contractMocks.fetchCollectionContractOffers.mockResolvedValue([]);
     contractMocks.fetchContractOffersForTokenId.mockResolvedValue([]);
+    anchoringMocks.getAnchoredTokenIdSet.mockResolvedValue(undefined);
+    anchoringMocks.getAnchorStatusForTokens.mockResolvedValue(new Map());
+    anchoringMocks.getTokenAnchorStatus.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -146,6 +155,19 @@ describe("marketplace queries", () => {
     expect(parseMarketplaceSearchParams({ kind: "all" })).toMatchObject({
       kind: "all",
     });
+  });
+
+  it("parses anchor status filters and drops unknown values", () => {
+    expect(parseMarketplaceSearchParams({ anchor: "never" })).toMatchObject({
+      anchor: "never",
+    });
+    expect(parseMarketplaceSearchParams({ anchor: "anchored" })).toMatchObject({
+      anchor: "anchored",
+    });
+    expect(
+      parseMarketplaceSearchParams({ anchor: "sometimes" }).anchor,
+    ).toBeUndefined();
+    expect(parseMarketplaceSearchParams({}).anchor).toBeUndefined();
   });
 
   it("filters by collection, kind, token, and price", () => {
@@ -311,6 +333,109 @@ describe("marketplace queries", () => {
         kind: "sell",
       }).map((offer) => offer.id),
     ).toEqual(["one"]);
+  });
+
+  it("filters marketplace offers by anchor status using the anchored set", async () => {
+    contractMocks.fetchCollectionContractOffers.mockResolvedValue([
+      baseOffers[0],
+      {
+        id: "anchored-listing",
+        collectionId: "random-walk",
+        tokenId: 7,
+        kind: "sell",
+        priceEth: 0.9,
+        maker: "0x0000000000000000000000000000000000000003",
+        createdAt: "2026-01-03T00:00:00.000Z",
+      },
+    ]);
+    anchoringMocks.getAnchoredTokenIdSet.mockResolvedValue(new Set([7]));
+
+    const neverAnchored = await getMarketplaceOffers({
+      collection: "random-walk",
+      kind: "sell",
+      sort: "price-asc",
+      anchor: "never",
+    });
+
+    expect(neverAnchored.map((offer) => offer.id)).toEqual(["one"]);
+
+    const anchored = await getMarketplaceOffers({
+      collection: "random-walk",
+      kind: "sell",
+      sort: "price-asc",
+      anchor: "anchored",
+    });
+
+    expect(anchored.map((offer) => offer.id)).toEqual(["anchored-listing"]);
+  });
+
+  it("keeps offers visible when the anchored set is unavailable", async () => {
+    contractMocks.fetchCollectionContractOffers.mockResolvedValue([
+      baseOffers[0],
+    ]);
+    anchoringMocks.getAnchoredTokenIdSet.mockResolvedValue(undefined);
+
+    const offers = await getMarketplaceOffers({
+      collection: "random-walk",
+      kind: "sell",
+      sort: "price-asc",
+      anchor: "never",
+    });
+
+    expect(offers.map((offer) => offer.id)).toEqual(["one"]);
+  });
+
+  it("filters discover token pages by anchor status", async () => {
+    indexMocks.getCollectionTokenIds.mockResolvedValue([5, 7]);
+    anchoringMocks.getAnchoredTokenIdSet.mockResolvedValue(new Set([5]));
+    const detailHtml = (tokenId: number) => String.raw`
+      self.__next_f.push([1,"{\"nft\":{\"id\":${tokenId},\"owner\":\"0x0000000000000000000000000000000000000001\",\"seed\":\"seed-${tokenId}\"},\"buyOffers\":[],\"sellOffers\":[]}"]);
+    `;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const tokenId = Number(String(input).split("/").pop());
+        return new Response(detailHtml(tokenId));
+      }),
+    );
+
+    const page = await getMarketplaceTokenPage({
+      collection: "random-walk",
+      view: "discover",
+      anchor: "never",
+      page: 1,
+      pageSize: 12,
+    });
+
+    expect(page.totalItems).toBe(1);
+    expect(page.items[0]?.token.tokenId).toBe(7);
+  });
+
+  it("stamps token markets with their on-chain anchor status", async () => {
+    anchoringMocks.getTokenAnchorStatus.mockResolvedValue(true);
+    const cosmicMetadata = {
+      image: "cosmic.png",
+      name: "Cosmic Signature #10",
+      properties: {
+        owner: "0x0000000000000000000000000000000000000003",
+        seed: "seed",
+        token_id: 10,
+      },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify(cosmicMetadata))),
+    );
+
+    await expect(getTokenMarket("cosmic-signature", 10)).resolves.toMatchObject(
+      {
+        token: { tokenId: 10, anchored: true },
+      },
+    );
+    expect(anchoringMocks.getTokenAnchorStatus).toHaveBeenCalledWith(
+      "cosmic-signature",
+      10,
+    );
   });
 
   it("fetches and filters Random Walk offers from the marketplace contract", async () => {

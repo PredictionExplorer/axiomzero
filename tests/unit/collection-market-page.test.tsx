@@ -12,6 +12,14 @@ const collectionIndexMocks = vi.hoisted(() => ({
   getCollectionSupply: vi.fn(),
 }));
 
+const anchoringMocks = vi.hoisted(() => ({
+  getAnchoredTokenIdSet: vi.fn(),
+}));
+
+const ethUsdMocks = vi.hoisted(() => ({
+  getEthUsdPrice: vi.fn(),
+}));
+
 vi.mock("@/lib/marketplace/queries", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@/lib/marketplace/queries")>();
@@ -23,6 +31,16 @@ vi.mock("@/lib/marketplace/queries", async (importOriginal) => {
   };
 });
 vi.mock("@/lib/marketplace/collection-index-live", () => collectionIndexMocks);
+vi.mock("@/lib/marketplace/anchoring-live", () => anchoringMocks);
+vi.mock("@/lib/pricing/eth-usd", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/pricing/eth-usd")>();
+
+  return {
+    ...actual,
+    getEthUsdPrice: ethUsdMocks.getEthUsdPrice,
+  };
+});
 
 import { CollectionMarketPage } from "@/components/marketplace/collection-market-page";
 
@@ -64,6 +82,28 @@ describe("CollectionMarketPage", () => {
       totalPages: 1,
     });
     collectionIndexMocks.getCollectionSupply.mockResolvedValue(5_000);
+    anchoringMocks.getAnchoredTokenIdSet.mockResolvedValue(undefined);
+    ethUsdMocks.getEthUsdPrice.mockResolvedValue(undefined);
+  });
+
+  it("shows a linked never-anchored supply stat when the anchor scan resolves", async () => {
+    queryMocks.getMarketplaceOffers.mockResolvedValue(collectionWideOffers);
+    anchoringMocks.getAnchoredTokenIdSet.mockResolvedValue(new Set([1, 2, 3]));
+
+    render(
+      await CollectionMarketPage({
+        collectionId: "random-walk",
+        searchParams: Promise.resolve({}),
+      }),
+    );
+
+    const statCard = screen.getByRole("link", { name: /never anchored/i });
+
+    expect(statCard).toHaveAttribute(
+      "href",
+      "/random-walk?view=discover&anchor=never",
+    );
+    expect(statCard).toHaveTextContent("4,997");
   });
 
   it("uses visible offers for stats when discover is already collection-wide", async () => {

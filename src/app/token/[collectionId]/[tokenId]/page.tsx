@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
 import { getCollection } from "@/config/collections";
+import { anchorStatusLabel } from "@/components/marketplace/anchor-status-pill";
 import { TokenDetailTabs } from "@/components/marketplace/token-detail-tabs";
 import {
   TokenCollectorNotesPanel,
@@ -9,6 +10,7 @@ import {
   TokenMarketPanel,
 } from "@/components/marketplace/token-detail-panels";
 import { TokenMediaViewer } from "@/components/marketplace/token-media-viewer";
+import { WatchButton } from "@/components/marketplace/watch-button";
 import { JsonLd } from "@/components/seo/json-ld";
 import { GlossaryTip } from "@/components/ui/tooltip";
 import type { GlossaryKey } from "@/lib/glossary";
@@ -30,6 +32,7 @@ import {
   tokenDetailHref,
 } from "@/lib/marketplace/token-detail";
 import { getEthUsdPrice } from "@/lib/pricing/eth-usd";
+import { sameAddress } from "@/lib/marketplace/trading-actions";
 import {
   breadcrumbJsonLd,
   tokenArtworkJsonLd,
@@ -134,6 +137,10 @@ export default async function TokenPage({
   const tokenOffers = market.offers;
   const activeSellOffer = sortOffersForDisplay(tokenOffers, "sell")[0];
   const highestBid = sortOffersForDisplay(tokenOffers, "buy")[0];
+  const isInAnchorVault = sameAddress(
+    token.owner,
+    collection.anchoringWalletAddress,
+  );
   const requestedState = parseTokenDetailState(resolvedSearchParams);
   const mediaModel = buildTokenMediaModel(collection.id, token, requestedState);
   const snapshotTrait = primaryTokenTrait(token);
@@ -255,6 +262,23 @@ export default async function TokenPage({
                 align="start"
               />
             </span>
+            {token.anchored !== undefined ? (
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-semibold ${
+                  token.anchored
+                    ? "border-ivory/15 bg-ink/45 text-bone/80"
+                    : "border-chartreuse/25 bg-chartreuse/12 text-chartreuse"
+                }`}
+              >
+                <span>{anchorStatusLabel(token.anchored, isInAnchorVault)}</span>
+                <GlossaryTip termKey="anchored" align="start" />
+              </span>
+            ) : null}
+            <WatchButton
+              collectionId={collection.id}
+              tokenId={token.tokenId}
+              variant="pill"
+            />
           </div>
           <h1 className="font-display mt-5 text-5xl font-semibold tracking-[-0.06em] text-ivory sm:text-7xl">
             {token.name}
@@ -264,7 +288,14 @@ export default async function TokenPage({
           </p>
 
           <dl className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <HeroStat label="Owner" value={shortenAddress(token.owner, 6)} />
+            <HeroStat
+              label="Owner"
+              value={
+                isInAnchorVault
+                  ? "Anchoring vault"
+                  : shortenAddress(token.owner, 6)
+              }
+            />
             <HeroStat label={snapshotTrait.label} value={snapshotTrait.value} />
             <HeroStat
               label="Minted"

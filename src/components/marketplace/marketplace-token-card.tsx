@@ -3,16 +3,41 @@ import Link from "next/link";
 
 import { requireCollection } from "@/config/collections";
 import type { TokenMarketSummary } from "@/lib/marketplace/types";
+import { AnchorStatusPill } from "@/components/marketplace/anchor-status-pill";
+import { WatchButton } from "@/components/marketplace/watch-button";
 import { ButtonLink } from "@/components/ui/button";
 import { tokenPath } from "@/lib/marketplace/routes";
-import { formatEth, formatTokenId, shortenAddress } from "@/lib/utils";
+import { formatEthWithUsd } from "@/lib/pricing/eth-usd";
+import {
+  formatEth,
+  formatFloorDelta,
+  formatTokenId,
+  shortenAddress,
+} from "@/lib/utils";
+import { sameAddress } from "@/lib/marketplace/trading-actions";
 
 export function MarketplaceTokenCard({
   item,
+  usdPerEth,
+  floorPriceEth,
 }: {
   item: TokenMarketSummary;
+  usdPerEth?: number;
+  floorPriceEth?: number;
 }) {
   const collection = requireCollection(item.token.collectionId);
+  const listingUsd = item.activeSellOffer
+    ? formatEthWithUsd(item.activeSellOffer.priceEth, usdPerEth)
+    : undefined;
+  const floorDelta = item.activeSellOffer
+    ? formatFloorDelta(item.activeSellOffer.priceEth, floorPriceEth)
+    : undefined;
+  const listingContext = [
+    listingUsd ? `≈ ${listingUsd}` : undefined,
+    floorDelta,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <article
@@ -44,6 +69,11 @@ export function MarketplaceTokenCard({
             <span className="sr-only">, the highest active bid</span>
           </div>
         ) : null}
+        <AnchorStatusPill
+          anchored={item.token.anchored}
+          inVault={sameAddress(item.token.owner, collection.anchoringWalletAddress)}
+          className="absolute bottom-4 right-4"
+        />
       </div>
 
       <div className="space-y-5 p-5">
@@ -64,6 +94,17 @@ export function MarketplaceTokenCard({
                 ? formatEth(item.activeSellOffer.priceEth)
                 : "Unlisted"}
             </p>
+            {listingContext ? (
+              <p
+                className={`mt-1 text-xs ${
+                  floorDelta === "At floor"
+                    ? "font-semibold text-chartreuse"
+                    : "text-bone/70"
+                }`}
+              >
+                {listingContext}
+              </p>
+            ) : null}
           </div>
           <div className="rounded-2xl bg-ink/48 p-3">
             <p className="text-bone/75">Owner</p>
@@ -95,12 +136,18 @@ export function MarketplaceTokenCard({
           >
             View details
           </Link>
-          <ButtonLink
-            href={tokenPath(item.token.collectionId, item.token.tokenId)}
-            variant="secondary"
-          >
-            View and bid
-          </ButtonLink>
+          <div className="flex items-center gap-2">
+            <WatchButton
+              collectionId={item.token.collectionId}
+              tokenId={item.token.tokenId}
+            />
+            <ButtonLink
+              href={tokenPath(item.token.collectionId, item.token.tokenId)}
+              variant="secondary"
+            >
+              View and bid
+            </ButtonLink>
+          </div>
         </div>
       </div>
     </article>
