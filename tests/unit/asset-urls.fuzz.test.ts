@@ -10,6 +10,7 @@ import {
   cosmicSignatureImageUrl,
   cosmicSignatureThumbUrl,
 } from "@/lib/marketplace/cosmic-signature-live";
+import { fuzzParams } from "../helpers/fuzz";
 
 const tokenIdArb = fc.integer({ min: 0, max: 9_999_999 });
 
@@ -33,7 +34,7 @@ describe("asset URL fuzzing", () => {
           true,
         );
       }),
-      { numRuns: 200 },
+      fuzzParams(200),
     );
   });
 
@@ -51,7 +52,7 @@ describe("asset URL fuzzing", () => {
           "0x0000000000000000000000000000000000000000",
         );
       }),
-      { numRuns: 200 },
+      fuzzParams(200),
     );
   });
 
@@ -79,7 +80,7 @@ describe("asset URL fuzzing", () => {
         // The 0x prefix must never be doubled.
         expect(image.pathname).not.toContain("0x0x");
       }),
-      { numRuns: 200 },
+      fuzzParams(200),
     );
   });
 });

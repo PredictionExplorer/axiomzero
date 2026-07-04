@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseMarketplaceSearchParams } from "@/lib/marketplace/queries";
 import { parseTokenDetailState } from "@/lib/marketplace/token-detail";
+import { fuzzParams } from "../helpers/fuzz";
 
 /**
  * Next.js hands searchParams over as Record<string, string | string[] |
@@ -71,7 +72,7 @@ describe("search param parsing fuzzing", () => {
 
         expect(typeof parsed.listedOnly).toBe("boolean");
       }),
-      { numRuns: 500 },
+      fuzzParams(500),
     );
   });
 
@@ -84,7 +85,7 @@ describe("search param parsing fuzzing", () => {
         expect(["image", "single", "triple"]).toContain(state.media);
         expect(["market", "history", "notes"]).toContain(state.tab);
       }),
-      { numRuns: 500 },
+      fuzzParams(500),
     );
   });
 });

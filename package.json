@@ -16,6 +16,7 @@
     "test": "pnpm test:unit && pnpm test:e2e",
     "test:unit": "vitest run --coverage",
     "test:unit:watch": "vitest",
+    "test:fuzz": "vitest run --coverage=false --testTimeout=0 .fuzz.test",
     "test:e2e": "playwright test",
     "test:a11y": "playwright test tests/e2e/a11y.spec.ts",
     "test:lighthouse": "lhci collect --config=./lighthouserc.json && lhci assert --config=./lighthouserc.json",

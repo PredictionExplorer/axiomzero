@@ -6,6 +6,7 @@ import type {
   TokenHistoryEventKind,
   TokenHistoryRecord,
 } from "@/lib/marketplace/types";
+import { fuzzParams } from "../helpers/fuzz";
 
 const kindArb = fc.constantFrom<TokenHistoryEventKind>(
   "mint",
@@ -81,7 +82,7 @@ describe("history formatting fuzzing", () => {
           expect(viewRecord.key).toContain(String(source.blockNumber));
         }
       }),
-      { numRuns: 300 },
+      fuzzParams(300),
     );
   });
 
@@ -96,7 +97,7 @@ describe("history formatting fuzzing", () => {
           expect(formatted.title).toBe(`Record ${record.recordType}`);
         }
       }),
-      { numRuns: 300 },
+      fuzzParams(300),
     );
   });
 });

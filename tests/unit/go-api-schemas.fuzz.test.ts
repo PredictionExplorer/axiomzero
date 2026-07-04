@@ -13,6 +13,7 @@ import {
 import { fetchGoApiJson, GoApiError } from "@/lib/marketplace/go-api";
 import { coerceAddress, participantAddress } from "@/lib/marketplace/eth";
 import type { TokenHistoryEventKind } from "@/lib/marketplace/types";
+import { fuzzParams } from "../helpers/fuzz";
 
 const HISTORY_KINDS: TokenHistoryEventKind[] = [
   "mint",
@@ -126,7 +127,7 @@ describe("Go API normalizer fuzzing", () => {
           expect(isValidParticipant(record.to)).toBe(true);
         }
       }),
-      { numRuns: 200 },
+      fuzzParams(200),
     );
   });
 
@@ -153,7 +154,7 @@ describe("Go API normalizer fuzzing", () => {
 
         expect(record.kind).toBe(expected);
       }),
-      { numRuns: 200 },
+      fuzzParams(200),
     );
   });
 
@@ -182,7 +183,7 @@ describe("Go API normalizer fuzzing", () => {
           }
         },
       ),
-      { numRuns: 200 },
+      fuzzParams(200),
     );
   });
 
@@ -231,7 +232,7 @@ describe("Go API normalizer fuzzing", () => {
           vi.unstubAllGlobals();
         },
       ),
-      { numRuns: 60 },
+      fuzzParams(60),
     );
   });
 
@@ -257,7 +258,7 @@ describe("Go API normalizer fuzzing", () => {
           }
         },
       ),
-      { numRuns: 300 },
+      fuzzParams(300),
     );
   });
 });
