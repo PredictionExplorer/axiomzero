@@ -32,15 +32,17 @@ describe("token detail panels", () => {
         token={token({
           tokenHistory: [
             {
+              kind: "mint",
               recordType: 1,
               blockNumber: 100,
               timestamp: 1,
               dateTime: "2026-01-01T00:00:00.000Z",
-              buyer: "0x0000000000000000000000000000000000000002",
+              owner: "0x0000000000000000000000000000000000000002",
               price: 1,
             },
             {
-              recordType: 2,
+              kind: "sale",
+              recordType: 4,
               blockNumber: 200,
               timestamp: 2,
               dateTime: "2026-02-01T00:00:00.000Z",

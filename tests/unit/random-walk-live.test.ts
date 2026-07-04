@@ -1,209 +1,314 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
-  fetchRandomWalkMarketplaceOffers,
   fetchRandomWalkMetadata,
   fetchRandomWalkTokenDetail,
-  parseRandomWalkDetailHtml,
-  parseRandomWalkMarketplaceHtml,
+  fetchRandomWalkTokenHistory,
+  normalizeRandomWalkHistory,
   randomWalkArtwork,
+  randomWalkAssets,
   randomWalkTokenPreview,
   tokenFromRandomWalkMetadata,
+  type RandomWalkHistoryEntry,
 } from "@/lib/marketplace/random-walk-live";
+import { GoApiError } from "@/lib/marketplace/go-api";
+import {
+  emptyRandomWalkHistoryResponse,
+  goApiErrorResponse,
+  jsonResponse,
+  randomWalkInfoResponse,
+  randomWalkMarketplaceHistoryRecords,
+  randomWalkToken5HistoryResponse,
+  routedFetchMock,
+} from "../helpers/go-api-fixtures";
 
 describe("Random Walk live data adapter", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it("parses marketplace sell listings from serialized page output", () => {
-    const html = String.raw`
-      ["$","div","sell-381",{"className":"space-y-3","children":[
-        ["$","$L1f",null,{"id":1271,"image":"https://api.randomwalknft.com:1443/images/randomwalk/001271_black_thumb.jpg","href":"/detail/1271"}],
-        ["$","span",null,{"children":["#001271"," · ","0.1000 ETH"]}]
-      ]}]
-    `;
-
-    expect(parseRandomWalkMarketplaceHtml(html, "sell")).toEqual([
-      expect.objectContaining({
-        id: "sell-381-1271-0.1000",
-        offerId: 381,
-        collectionId: "random-walk",
-        tokenId: 1271,
-        kind: "sell",
-        priceEth: 0.1,
-        artwork: expect.objectContaining({
-          image:
-            "https://api.randomwalknft.com:1443/images/randomwalk/001271_black_thumb.jpg",
-        }),
-      }),
-    ]);
-  });
-
-  it("parses marketplace buy offers and ignores the other offer type", () => {
-    const html = String.raw`
-      ["$","div","sell-1",{"children":[["$","$L1f",null,{"id":1,"image":"sell.jpg","href":"/detail/1"}],["$","span",null,{"children":["#000001"," · ","1.0000 ETH"]}]]}]
-      ["$","div","buy-319",{"children":[["$","$L1f",null,{"id":3435,"image":"buy.jpg","href":"/detail/3435"}],["$","span",null,{"children":["#003435"," · ","0.0010 ETH"]}]]}]
-    `;
-
-    expect(parseRandomWalkMarketplaceHtml(html, "buy")).toEqual([
-      expect.objectContaining({
-        id: "buy-319-3435-0.0010",
-        tokenId: 3435,
-        kind: "buy",
-        priceEth: 0.001,
-      }),
-    ]);
-  });
-
-  it("deduplicates repeated card payloads", () => {
-    const card = String.raw`["$","div","sell-381",{"children":[["$","$L1f",null,{"id":1271,"image":"thumb.jpg","href":"/detail/1271"}],["$","span",null,{"children":["#001271"," · ","0.1000 ETH"]}]]}]`;
-
-    expect(
-      parseRandomWalkMarketplaceHtml(`${card}${card}`, "sell"),
-    ).toHaveLength(1);
-  });
-
-  it("falls back to rendered card HTML when flight chunks are split", () => {
-    const html = String.raw`
-      ["$","div","sell-157",{"children":[["$","$L1f",null,{"id":3409,"image":"https://api.randomwalknft.com:1443/images/randomwalk/003409_black_thumb.jpg","href":"/detail/3409"}],
-      </script><script>self.__next_f.push([1,":["#002771"," · ","0.1190 ETH"]}]
-      <a href="/detail/3409"><div><img alt="Preview image for NFT #003409" src="https://api.randomwalknft.com:1443/images/randomwalk/003409_black_thumb.jpg"/></div></a>
-      <div class="flex items-center justify-between"><div>Sell listing</div><span>#003409<!-- --> · <!-- -->0.1180 ETH</span></div>
-      <a href="/detail/2771"><div><img alt="Preview image for NFT #002771" src="https://api.randomwalknft.com:1443/images/randomwalk/002771_black_thumb.jpg"/></div></a>
-      <div class="flex items-center justify-between"><div>Sell listing</div><span>#002771<!-- --> · <!-- -->0.1190 ETH</span></div>
-    `;
-
-    expect(parseRandomWalkMarketplaceHtml(html, "sell")).toEqual([
-      expect.objectContaining({
-        id: "sell-rendered-3409-0.1180",
-        tokenId: 3409,
-        priceEth: 0.118,
-      }),
-      expect.objectContaining({
-        id: "sell-rendered-2771-0.1190",
-        tokenId: 2771,
-        priceEth: 0.119,
-      }),
-    ]);
-  });
-
-  it("parses token detail payloads with live offer IDs and history", () => {
-    const html = String.raw`
-      self.__next_f.push([1,"{\"nft\":{\"id\":1233,\"owner\":\"0x47eF85Dfb775aCE0934fBa9EEd09D22e6eC0Cc08\",\"seed\":\"2993ea\",\"rating\":0,\"assets\":{\"blackImage\":\"https://api.randomwalknft.com:1443/images/randomwalk/001233_black.png\",\"blackThumb\":\"https://api.randomwalknft.com:1443/images/randomwalk/001233_black_thumb.jpg\",\"blackSingleVideo\":\"https://api.randomwalknft.com:1443/images/randomwalk/001233_black_single.mp4\"},\"tokenHistory\":[{\"recordType\":2,\"blockNumber\":37204293,\"timestamp\":1668168199,\"dateTime\":\"2022-11-11T12:03:19Z\",\"seller\":\"0x0000000000000000000000000000000000000000\",\"buyer\":\"0xbC9f202d46fC4c6F3BdDd50eB43642C81bCe371c\",\"price\":0.001,\"offerId\":346}],\"mintedAt\":\"2021-11-12T03:20:16Z\"},\"buyOffers\":[{\"id\":347,\"offerId\":346,\"tokenId\":1233,\"seller\":\"0x0000000000000000000000000000000000000000\",\"buyer\":\"0xbC9f202d46fC4c6F3BdDd50eB43642C81bCe371c\",\"price\":0.001,\"active\":true,\"createdAt\":\"2022-11-11T12:03:19Z\",\"createdAtTimestamp\":1668168199,\"kind\":\"buy\"}],\"sellOffers\":[{\"id\":13,\"offerId\":12,\"tokenId\":1233,\"seller\":\"0x3CD1a28Be614136e26F867c9fE47821Fcf6dc7f6\",\"buyer\":\"0x0000000000000000000000000000000000000000\",\"price\":0.1,\"active\":true,\"createdAt\":\"2021-11-12T03:37:31Z\",\"createdAtTimestamp\":1636688251,\"kind\":\"sell\"}],\"message\":\"$undefined\"}]]"]);
-    `;
-
-    const result = parseRandomWalkDetailHtml(html);
-
-    expect(result.token).toMatchObject({
-      collectionId: "random-walk",
-      tokenId: 1233,
-      name: "Random Walk #001233",
-      seed: "2993ea",
-      mintedAt: "2021-11-12T03:20:16Z",
+  it("builds the full deterministic media set from the API host", () => {
+    expect(randomWalkAssets(5)).toEqual({
+      blackImage:
+        "https://api.randomwalknft.com:1443/images/randomwalk/000005_black.png",
+      blackThumb:
+        "https://api.randomwalknft.com:1443/images/randomwalk/000005_black_thumb.jpg",
+      blackSingleVideo:
+        "https://api.randomwalknft.com:1443/images/randomwalk/000005_black_single.mp4",
+      blackTripleVideo:
+        "https://api.randomwalknft.com:1443/images/randomwalk/000005_black_triple.mp4",
+      whiteImage:
+        "https://api.randomwalknft.com:1443/images/randomwalk/000005_white.png",
+      whiteThumb:
+        "https://api.randomwalknft.com:1443/images/randomwalk/000005_white_thumb.jpg",
+      whiteSingleVideo:
+        "https://api.randomwalknft.com:1443/images/randomwalk/000005_white_single.mp4",
+      whiteTripleVideo:
+        "https://api.randomwalknft.com:1443/images/randomwalk/000005_white_triple.mp4",
     });
-    expect(result.offers).toEqual([
-      expect.objectContaining({ id: "sell-12", offerId: 12, kind: "sell" }),
-      expect.objectContaining({ id: "buy-346", offerId: 346, kind: "buy" }),
+  });
+
+  it("builds deterministic artwork and preview tokens without fetching", () => {
+    expect(randomWalkArtwork(7)).toEqual({
+      image:
+        "https://api.randomwalknft.com:1443/images/randomwalk/000007_black_thumb.jpg",
+      alt: "Random Walk #000007 artwork",
+    });
+    expect(randomWalkTokenPreview(7)).toMatchObject({
+      collectionId: "random-walk",
+      tokenId: 7,
+      name: "Random Walk #000007",
+      owner: "0x0000000000000000000000000000000000000000",
+      seed: "",
+      artwork: {
+        image:
+          "https://api.randomwalknft.com:1443/images/randomwalk/000007_black_thumb.jpg",
+      },
+    });
+  });
+
+  it("fetches token detail from tokens/info and tokens/history", async () => {
+    const fetchMock = routedFetchMock([
+      [
+        /\/api\/randomwalk\/tokens\/info\/5$/,
+        () => jsonResponse(randomWalkInfoResponse(5)),
+      ],
+      [
+        /\/api\/randomwalk\/tokens\/history\/5\/0\/1000$/,
+        () => jsonResponse(randomWalkToken5HistoryResponse),
+      ],
     ]);
-    expect(result.token.tokenHistory?.[0]?.buyer).toBe(
-      "0xbC9f202d46fC4c6F3BdDd50eB43642C81bCe371c",
+    vi.stubGlobal("fetch", fetchMock);
+
+    const token = await fetchRandomWalkTokenDetail(5);
+
+    expect(token).toMatchObject({
+      collectionId: "random-walk",
+      tokenId: 5,
+      name: "Random Walk #000005",
+      owner: "0xcc9C0DDF13EB1853185A51296FcEBec103b466e1",
+      seed: "86e6b608f61e95788b010714a97479e0520c5c20f2b70e26f267730d14a68030",
+      mintedAt: "2021-11-12T00:00:17Z",
+    });
+    expect(token.assets?.whiteTripleVideo).toBe(
+      "https://api.randomwalknft.com:1443/images/randomwalk/000005_white_triple.mp4",
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.randomwalknft.com:1443/api/randomwalk/tokens/info/5",
+      expect.objectContaining({ next: { revalidate: 60 } }),
     );
   });
 
-  it("drops inactive detail offers before they reach pricing displays", () => {
-    const html = JSON.stringify({
-      nft: {
-        id: 1233,
-        owner: "0x47eF85Dfb775aCE0934fBa9EEd09D22e6eC0Cc08",
-        seed: "2993ea",
-      },
-      buyOffers: [
-        {
-          id: 1,
-          offerId: 1,
-          tokenId: 1233,
-          seller: "0x0000000000000000000000000000000000000000",
-          buyer: "0x0000000000000000000000000000000000000001",
-          price: 10,
-          active: false,
-          createdAt: "2026-01-01T00:00:00.000Z",
-          createdAtTimestamp: 1,
-          kind: "buy",
-        },
-        {
-          id: 2,
-          offerId: 2,
-          tokenId: 1233,
-          seller: "0x0000000000000000000000000000000000000000",
-          buyer: "0x0000000000000000000000000000000000000002",
-          price: 2,
-          active: true,
-          createdAt: "2026-01-02T00:00:00.000Z",
-          createdAtTimestamp: 2,
-          kind: "buy",
-        },
-      ],
-      sellOffers: [
-        {
-          id: 3,
-          offerId: 3,
-          tokenId: 1233,
-          seller: "0x0000000000000000000000000000000000000003",
-          buyer: "0x0000000000000000000000000000000000000000",
-          price: 0.01,
-          active: false,
-          createdAt: "2026-01-03T00:00:00.000Z",
-          createdAtTimestamp: 3,
-          kind: "sell",
-        },
-        {
-          id: 4,
-          offerId: 4,
-          tokenId: 1233,
-          seller: "0x0000000000000000000000000000000000000004",
-          buyer: "0x0000000000000000000000000000000000000000",
-          price: 1.25,
-          active: true,
-          createdAt: "2026-01-04T00:00:00.000Z",
-          createdAtTimestamp: 4,
-          kind: "sell",
-        },
-      ],
-    });
+  it("normalizes the mint and price-less transfer history of token 5", async () => {
+    // Regression: the transfer record carries no price. The scraped RSC
+    // payload used to serialize it as the string "$undefined" and fail
+    // validation, silently degrading the whole token to zero-owner metadata.
+    vi.stubGlobal(
+      "fetch",
+      routedFetchMock([
+        [
+          /\/tokens\/history\/5\//,
+          () => jsonResponse(randomWalkToken5HistoryResponse),
+        ],
+      ]),
+    );
 
-    expect(
-      parseRandomWalkDetailHtml(html).offers.map((offer) => offer.id),
-    ).toEqual(["sell-4", "buy-2"]);
+    const history = await fetchRandomWalkTokenHistory(5);
+
+    expect(history).toEqual([
+      {
+        kind: "mint",
+        recordType: 1,
+        blockNumber: 2983683,
+        timestamp: 1636675217,
+        dateTime: "2021-11-12T00:00:17Z",
+        owner: "0x6e6092EE787F2FBA1940d0a162aCdcFB2Bbb7Eff",
+        seller: undefined,
+        buyer: undefined,
+        from: undefined,
+        to: undefined,
+        price: 0.001006618176641971,
+        offerId: undefined,
+        name: undefined,
+      },
+      {
+        kind: "transfer",
+        recordType: 6,
+        blockNumber: 49305544,
+        timestamp: 1672192433,
+        dateTime: "2022-12-28T01:53:53Z",
+        owner: undefined,
+        seller: undefined,
+        buyer: undefined,
+        from: "0x6e6092EE787F2FBA1940d0a162aCdcFB2Bbb7Eff",
+        to: "0xcc9C0DDF13EB1853185A51296FcEBec103b466e1",
+        price: undefined,
+        offerId: undefined,
+        name: undefined,
+      },
+    ]);
   });
 
-  it("uses safe defaults when optional detail fields are missing", () => {
-    const html = String.raw`
-      self.__next_f.push([1,"{\"nft\":{\"id\":6,\"name\":\"\",\"owner\":\"not-an-address\",\"seed\":\"abc\"},\"message\":\"$undefined\"}"]);
-    `;
+  it("maps every observed marketplace record type to a semantic kind", () => {
+    const normalized = normalizeRandomWalkHistory(
+      randomWalkMarketplaceHistoryRecords as RandomWalkHistoryEntry[],
+    );
 
-    const result = parseRandomWalkDetailHtml(html);
+    expect(normalized.map((record) => record.kind)).toEqual([
+      "listing",
+      "bid",
+      "offer-canceled",
+      "sale",
+      "named",
+    ]);
+    expect(normalized[0]).toMatchObject({
+      seller: "0x3CD1a28Be614136e26F867c9fE47821Fcf6dc7f6",
+      buyer: undefined,
+      offerId: 12,
+      price: 0.1,
+    });
+    expect(normalized[1]).toMatchObject({
+      buyer: "0xbC9f202d46fC4c6F3BdDd50eB43642C81bCe371c",
+      seller: undefined,
+      offerId: 346,
+    });
+    expect(normalized[3]).toMatchObject({
+      buyer: "0x85140917c4abA6627A824a252426CF25A6D338AD",
+      seller: "0xB96113296cE138E30F0Ffa7Ce459bA20f55572f9",
+      price: 0.0525,
+    });
+    expect(normalized[4]).toMatchObject({
+      kind: "named",
+      name: "1 st Mint",
+    });
+  });
 
-    expect(result.token).toMatchObject({
-      tokenId: 6,
-      owner: "0x0000000000000000000000000000000000000000",
-      artwork: {
-        image:
-          "https://api.randomwalknft.com:1443/images/randomwalk/000006_black_thumb.jpg",
+  it("maps unknown record types to a generic kind instead of failing", () => {
+    const normalized = normalizeRandomWalkHistory([
+      {
+        RecordType: 99,
+        Record: {
+          BlockNum: 1,
+          TimeStamp: 2,
+          DateTime: "2026-01-01T00:00:00Z",
+        },
       },
-      traits: [{ label: "Beauty score", value: "0.00" }],
+    ]);
+
+    expect(normalized[0]).toMatchObject({ kind: "other", recordType: 99 });
+  });
+
+  it("keeps custom token names from the API", async () => {
+    vi.stubGlobal(
+      "fetch",
+      routedFetchMock([
+        [
+          /\/tokens\/info\/0$/,
+          () => jsonResponse(randomWalkInfoResponse(0, { CurName: "1 st Mint" })),
+        ],
+        [
+          /\/tokens\/history\/0\//,
+          () => jsonResponse(emptyRandomWalkHistoryResponse(0)),
+        ],
+      ]),
+    );
+
+    await expect(fetchRandomWalkTokenDetail(0)).resolves.toMatchObject({
+      tokenId: 0,
+      name: "1 st Mint",
+      mintedAt: undefined,
       tokenHistory: [],
     });
-    expect(result.offers).toEqual([]);
   });
 
-  it("throws a clear error when detail payloads are missing", () => {
-    expect(() =>
-      parseRandomWalkDetailHtml("<html>No token here</html>"),
-    ).toThrow("Random Walk detail payload was not found.");
+  it("degrades to a history-less token when only the history call fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      routedFetchMock([
+        [
+          /\/tokens\/info\/5$/,
+          () => jsonResponse(randomWalkInfoResponse(5)),
+        ],
+        [
+          /\/tokens\/history\/5\//,
+          () => new Response("", { status: 503 }),
+        ],
+      ]),
+    );
+
+    const token = await fetchRandomWalkTokenDetail(5);
+
+    expect(token.owner).toBe("0xcc9C0DDF13EB1853185A51296FcEBec103b466e1");
+    expect(token.tokenHistory).toBeUndefined();
+    expect(token.mintedAt).toBeUndefined();
   });
 
-  it("builds a token from public metadata when detail parsing is unavailable", () => {
+  it("tolerates a null history slice from the Go backend", async () => {
+    vi.stubGlobal(
+      "fetch",
+      routedFetchMock([
+        [
+          /\/tokens\/history\/9\//,
+          () =>
+            jsonResponse({
+              ...emptyRandomWalkHistoryResponse(9),
+              TokenHistory: null,
+            }),
+        ],
+      ]),
+    );
+
+    await expect(fetchRandomWalkTokenHistory(9)).resolves.toEqual([]);
+  });
+
+  it("surfaces missing tokens with the backend error message", async () => {
+    vi.stubGlobal(
+      "fetch",
+      routedFetchMock([
+        [
+          /\/tokens\/info\/99999$/,
+          () =>
+            goApiErrorResponse(
+              "Error during query execution: sql: no rows in result set",
+            ),
+        ],
+        [
+          /\/tokens\/history\/99999\//,
+          () => jsonResponse(emptyRandomWalkHistoryResponse(99999)),
+        ],
+      ]),
+    );
+
+    const failure = await fetchRandomWalkTokenDetail(99999).catch(
+      (error: unknown) => error,
+    );
+
+    expect(failure).toBeInstanceOf(GoApiError);
+    expect((failure as GoApiError).httpStatus).toBe(400);
+    expect((failure as GoApiError).apiError).toContain("no rows");
+  });
+
+  it("rejects envelope failures even when the HTTP status is 200", async () => {
+    vi.stubGlobal(
+      "fetch",
+      routedFetchMock([
+        [
+          /\/tokens\/info\/1$/,
+          () => jsonResponse({ error: "backend exploded", status: 0 }),
+        ],
+        [
+          /\/tokens\/history\/1\//,
+          () => jsonResponse(emptyRandomWalkHistoryResponse(1)),
+        ],
+      ]),
+    );
+
+    await expect(fetchRandomWalkTokenDetail(1)).rejects.toThrow(
+      "backend exploded",
+    );
+  });
+
+  it("builds a token from public metadata when the API is unavailable", () => {
     const token = tokenFromRandomWalkMetadata(1271, {
       image:
         "https://nfts.randomwalknft.com/images/randomwalk/001271_black.png",
@@ -216,6 +321,7 @@ describe("Random Walk live data adapter", () => {
     expect(token).toMatchObject({
       tokenId: 1271,
       name: "Random Walk #001271",
+      owner: "0x0000000000000000000000000000000000000000",
       seed: "663ec50027f5a99f370ed4335dc7be82740ff78c6060e8e0fa898dd9834ce466",
       artwork: {
         image:
@@ -242,115 +348,42 @@ describe("Random Walk live data adapter", () => {
     );
   });
 
-  it("builds deterministic artwork and preview tokens without fetching metadata", () => {
-    expect(randomWalkArtwork(7)).toEqual({
-      image:
-        "https://api.randomwalknft.com:1443/images/randomwalk/000007_black_thumb.jpg",
-      alt: "Random Walk #000007 artwork",
-    });
-    expect(randomWalkTokenPreview(7)).toMatchObject({
-      collectionId: "random-walk",
-      tokenId: 7,
-      name: "Random Walk #000007",
-      seed: "",
-      artwork: {
-        image:
-          "https://api.randomwalknft.com:1443/images/randomwalk/000007_black_thumb.jpg",
-      },
-    });
-  });
-
-  it("fetches marketplace offers with Random Walk query parameters", async () => {
-    const html = String.raw`
-      ["$","div","buy-319",{"children":[["$","$L1f",null,{"id":3435,"image":"buy.jpg","href":"/detail/3435"}],["$","span",null,{"children":["#003435"," · ","0.0010 ETH"]}]]}]
-    `;
-    const fetchMock = vi.fn(async () => new Response(html));
+  it("tries the secondary metadata host before giving up", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("", { status: 500 }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          name: "Random Walk #000008",
+          properties: { seed: "metadata-seed" },
+        }),
+      );
     vi.stubGlobal("fetch", fetchMock);
 
-    const offers = await fetchRandomWalkMarketplaceOffers("buy", "price-desc");
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://randomwalknft.com/marketplace?filter=buy&sort=price-desc",
-      expect.objectContaining({ next: { revalidate: 60 } }),
-    );
-    expect(offers[0]).toMatchObject({
-      id: "buy-319-3435-0.0010",
-      priceEth: 0.001,
+    await expect(fetchRandomWalkMetadata(8)).resolves.toMatchObject({
+      tokenId: 8,
+      seed: "metadata-seed",
     });
-  });
-
-  it("rejects redirected Axiom Zero HTML from the legacy marketplace scraper", async () => {
-    const response = new Response(
-      "<html>Axiom Zero /token/random-walk/7</html>",
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://randomwalknft-api.com/metadata/8",
+      expect.anything(),
     );
-    Object.defineProperty(response, "redirected", { value: true });
-    Object.defineProperty(response, "url", {
-      value: "https://www.axiomzero.market/random-walk",
-    });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => response),
-    );
-
-    await expect(fetchRandomWalkMarketplaceOffers()).rejects.toThrow(
-      "Random Walk marketplace redirected away from the collection source.",
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://api.randomwalknft.com:1443/api/randomwalk/metadata/8",
+      expect.anything(),
     );
   });
 
-  it("rejects Axiom Zero HTML that would otherwise parse as an empty market", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async () =>
-          new Response('<html>Axiom Zero <a href="/token/random-walk/7">'),
-      ),
-    );
-
-    await expect(fetchRandomWalkMarketplaceOffers()).rejects.toThrow(
-      "Random Walk marketplace returned Axiom Zero HTML instead of marketplace data.",
-    );
-  });
-
-  it("surfaces failed marketplace, detail, and metadata fetches", async () => {
+  it("surfaces the last error when every metadata host fails", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response("", { status: 500 })),
     );
 
-    await expect(fetchRandomWalkMarketplaceOffers()).rejects.toThrow(
-      "Random Walk marketplace returned 500.",
-    );
-    await expect(fetchRandomWalkTokenDetail(1)).rejects.toThrow(
-      "Random Walk token detail returned 500.",
-    );
     await expect(fetchRandomWalkMetadata(1)).rejects.toThrow(
-      "Random Walk metadata returned 500.",
+      "Go API request failed (500)",
     );
-  });
-
-  it("fetches token detail and metadata successfully", async () => {
-    const detailHtml = String.raw`
-      self.__next_f.push([1,"{\"nft\":{\"id\":8,\"owner\":\"0x0000000000000000000000000000000000000001\",\"seed\":\"seed\"},\"sellOffers\":[],\"buyOffers\":[]}"]);
-    `;
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(detailHtml))
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            name: "Random Walk #000008",
-            properties: { seed: "metadata-seed" },
-          }),
-        ),
-      );
-    vi.stubGlobal("fetch", fetchMock);
-
-    await expect(fetchRandomWalkTokenDetail(8)).resolves.toMatchObject({
-      token: { tokenId: 8, seed: "seed" },
-    });
-    await expect(fetchRandomWalkMetadata(8)).resolves.toMatchObject({
-      tokenId: 8,
-      seed: "metadata-seed",
-    });
   });
 });

@@ -3,6 +3,8 @@ import { createPublicClient, http } from "viem";
 import { arbitrum } from "viem/chains";
 
 import { requireCollection } from "@/config/collections";
+import { fetchCosmicSignatureTokenIds } from "@/lib/marketplace/cosmic-signature-live";
+import { coerceAddress } from "@/lib/marketplace/eth";
 import type { Collection, CollectionId } from "@/lib/marketplace/types";
 import { erc721Abi } from "@/lib/web3/abis";
 
@@ -71,48 +73,69 @@ function uniqueSortedTokenIds(tokenIds: number[]) {
   return [...new Set(tokenIds)].sort((left, right) => left - right);
 }
 
+async function fetchOnChainCollectionTokenIds(
+  collection: Collection,
+  client: Erc721IndexClient,
+) {
+  const totalSupply = (await client.readContract({
+    address: collection.nftAddress,
+    abi: erc721Abi,
+    functionName: "totalSupply",
+  })) as bigint;
+  const count = Number(totalSupply);
+
+  if (!Number.isSafeInteger(count) || count < 0) {
+    throw new Error(`${collection.shortName} totalSupply is invalid.`);
+  }
+
+  if (count === 0) {
+    return [];
+  }
+
+  const results = await client.multicall({
+    allowFailure: true,
+    contracts: Array.from({ length: count }, (_, index) => ({
+      address: collection.nftAddress,
+      abi: erc721Abi,
+      functionName: "tokenByIndex",
+      args: [BigInt(index)],
+    })),
+  });
+  const tokenIds = results.flatMap((result) =>
+    result.status === "success" && typeof result.result === "bigint"
+      ? [Number(result.result)]
+      : [],
+  );
+
+  if (!tokenIds.length) {
+    throw new Error(`${collection.shortName} token index is unavailable.`);
+  }
+
+  return uniqueSortedTokenIds(tokenIds);
+}
+
 export async function fetchCollectionTokenIds({
   collectionId,
   client = createErc721PublicClient(),
 }: FetchCollectionTokenIdsOptions) {
   const collection = requireCollection(collectionId);
 
+  // The Cosmic Signature Go API serves the minted token list directly, which
+  // avoids a totalSupply + tokenByIndex multicall against a public RPC.
+  if (collectionId === "cosmic-signature") {
+    try {
+      const tokenIds = await fetchCosmicSignatureTokenIds();
+
+      if (tokenIds.length) {
+        return tokenIds;
+      }
+    } catch {
+      // Fall through to the on-chain index.
+    }
+  }
+
   try {
-    const totalSupply = (await client.readContract({
-      address: collection.nftAddress,
-      abi: erc721Abi,
-      functionName: "totalSupply",
-    })) as bigint;
-    const count = Number(totalSupply);
-
-    if (!Number.isSafeInteger(count) || count < 0) {
-      throw new Error(`${collection.shortName} totalSupply is invalid.`);
-    }
-
-    if (count === 0) {
-      return [];
-    }
-
-    const results = await client.multicall({
-      allowFailure: true,
-      contracts: Array.from({ length: count }, (_, index) => ({
-        address: collection.nftAddress,
-        abi: erc721Abi,
-        functionName: "tokenByIndex",
-        args: [BigInt(index)],
-      })),
-    });
-    const tokenIds = results.flatMap((result) =>
-      result.status === "success" && typeof result.result === "bigint"
-        ? [Number(result.result)]
-        : [],
-    );
-
-    if (!tokenIds.length) {
-      throw new Error(`${collection.shortName} token index is unavailable.`);
-    }
-
-    return uniqueSortedTokenIds(tokenIds);
+    return await fetchOnChainCollectionTokenIds(collection, client);
   } catch {
     return fallbackCollectionTokenIds(collection);
   }
@@ -123,6 +146,18 @@ export async function fetchCollectionSupply({
   client = createErc721PublicClient(),
 }: FetchCollectionSupplyOptions) {
   const collection = requireCollection(collectionId);
+
+  if (collectionId === "cosmic-signature") {
+    try {
+      const tokenIds = await fetchCosmicSignatureTokenIds();
+
+      if (tokenIds.length) {
+        return tokenIds.length;
+      }
+    } catch {
+      // Fall through to the on-chain read.
+    }
+  }
 
   try {
     const totalSupply = (await client.readContract({
@@ -140,6 +175,26 @@ export async function fetchCollectionSupply({
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Current on-chain owner of a token. Used to enrich fallback token data so a
+ * token never renders with the zero address when the collection API is down.
+ */
+export async function fetchCollectionTokenOwner({
+  collectionId,
+  tokenId,
+  client = createErc721PublicClient(),
+}: FetchCollectionTokenUriOptions): Promise<`0x${string}` | undefined> {
+  const collection = requireCollection(collectionId);
+  const owner = (await client.readContract({
+    address: collection.nftAddress,
+    abi: erc721Abi,
+    functionName: "ownerOf",
+    args: [BigInt(tokenId)],
+  })) as string;
+
+  return coerceAddress(owner);
 }
 
 export const getCollectionTokenIds = cache(async (collectionId: CollectionId) =>

@@ -58,6 +58,34 @@ const collection = {
   tokenRange: { start: 0, end: 2 },
 } satisfies Collection;
 
+const cosmicCollection = {
+  ...collection,
+  id: "cosmic-signature",
+  name: "Cosmic Signature NFTs",
+  shortName: "Cosmic Signature",
+  nftAddress: "0xbb84Be3500A63581d3F2d5AC3bdF8685AAedad25",
+  anchoringWalletAddress: "0x6308A405B4FF1eA890870Efe2a6D036750B81F7C",
+  externalUrl: "https://cosmicsignature.com/",
+  supplyNoun: { singular: "signature", plural: "signatures" },
+} satisfies Collection;
+
+function marketResponse(collectionId: string, tokenId: number) {
+  return new Response(
+    JSON.stringify({
+      token: {
+        collectionId,
+        tokenId,
+        name: `Token #${tokenId}`,
+        owner: "0x0000000000000000000000000000000000000001",
+        seed: "seed",
+        traits: [],
+        artwork: { image: "/art.png", alt: "Token artwork" },
+      },
+      offers: [],
+    }),
+  );
+}
+
 describe("MyNftsPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -245,6 +273,82 @@ describe("MyNftsPanel", () => {
         }),
       );
     });
+  });
+
+  it("reads Cosmic Signature ownership from the collection API without chain scans", async () => {
+    wagmiMock.account = {
+      address: "0x0000000000000000000000000000000000000001",
+      chainId: 42161,
+      isConnected: true,
+    };
+    wagmiMock.publicClient = {
+      readContract: vi.fn(async () => {
+        throw new Error("chain reads should not run when the API responds");
+      }),
+      multicall: vi.fn(async () => []),
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+
+        if (url.includes("/api/cosmicgame/cst/list/by_user/")) {
+          expect(url).toBe(
+            "https://nfts.cosmicsignature.com/api/cosmicgame/cst/list/by_user/0x0000000000000000000000000000000000000001/0/1000",
+          );
+          return new Response(
+            JSON.stringify({
+              UserTokens: [{ TokenId: 13 }],
+              error: "",
+              status: 1,
+            }),
+          );
+        }
+
+        return marketResponse("cosmic-signature", 13);
+      }),
+    );
+
+    render(<MyNftsPanel collections={[cosmicCollection]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/found 1 owned nft/i)).toBeInTheDocument();
+    });
+    expect(screen.getByRole("heading", { name: /#000013/i })).toBeVisible();
+    expect(wagmiMock.publicClient?.readContract).not.toHaveBeenCalled();
+  });
+
+  it("falls back to chain scans when the Cosmic Signature API is down", async () => {
+    wagmiMock.account = {
+      address: "0x0000000000000000000000000000000000000001",
+      chainId: 42161,
+      isConnected: true,
+    };
+    wagmiMock.publicClient = {
+      readContract: vi.fn(async () => 1n),
+      multicall: vi.fn(async () => [{ status: "success", result: 13n }]),
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+
+        if (url.includes("/api/cosmicgame/cst/list/by_user/")) {
+          return new Response("", { status: 503 });
+        }
+
+        return marketResponse("cosmic-signature", 13);
+      }),
+    );
+
+    render(<MyNftsPanel collections={[cosmicCollection]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/found 1 owned nft/i)).toBeInTheDocument();
+    });
+    expect(wagmiMock.publicClient?.readContract).toHaveBeenCalledWith(
+      expect.objectContaining({ functionName: "balanceOf" }),
+    );
   });
 
   it("falls back to ownerOf range scans when enumerable reads are unavailable", async () => {

@@ -6,6 +6,7 @@ const contractMocks = vi.hoisted(() => ({
 }));
 const indexMocks = vi.hoisted(() => ({
   getCollectionTokenIds: vi.fn(),
+  fetchCollectionTokenOwner: vi.fn(),
 }));
 const anchoringMocks = vi.hoisted(() => ({
   getAnchoredTokenIdSet: vi.fn(),
@@ -30,6 +31,36 @@ import {
   sortOffers,
 } from "@/lib/marketplace/queries";
 import type { MarketOffer } from "@/lib/marketplace/types";
+import {
+  emptyRandomWalkHistoryResponse,
+  jsonResponse,
+  randomWalkInfoResponse,
+  routedFetchMock,
+} from "../helpers/go-api-fixtures";
+
+type FetchRoutes = Parameters<typeof routedFetchMock>[0];
+
+/** Standard Random Walk API routes serving any token id with empty history. */
+function randomWalkApiRoutes(
+  owner = "0x0000000000000000000000000000000000000001",
+): FetchRoutes {
+  return [
+    [
+      /\/api\/randomwalk\/tokens\/info\/(\d+)$/,
+      (match) =>
+        jsonResponse(
+          randomWalkInfoResponse(Number(match[1]), {
+            CurOwnerAddr: owner,
+            SeedHex: `seed-${match[1]}`,
+          }),
+        ),
+    ],
+    [
+      /\/api\/randomwalk\/tokens\/history\/(\d+)\//,
+      (match) => jsonResponse(emptyRandomWalkHistoryResponse(Number(match[1]))),
+    ],
+  ];
+}
 
 const baseOffers = [
   {
@@ -63,6 +94,7 @@ describe("marketplace queries", () => {
     );
     contractMocks.fetchCollectionContractOffers.mockResolvedValue([]);
     contractMocks.fetchContractOffersForTokenId.mockResolvedValue([]);
+    indexMocks.fetchCollectionTokenOwner.mockResolvedValue(undefined);
     anchoringMocks.getAnchoredTokenIdSet.mockResolvedValue(undefined);
     anchoringMocks.getAnchorStatusForTokens.mockResolvedValue(new Map());
     anchoringMocks.getTokenAnchorStatus.mockResolvedValue(undefined);
@@ -388,16 +420,7 @@ describe("marketplace queries", () => {
   it("filters discover token pages by anchor status", async () => {
     indexMocks.getCollectionTokenIds.mockResolvedValue([5, 7]);
     anchoringMocks.getAnchoredTokenIdSet.mockResolvedValue(new Set([5]));
-    const detailHtml = (tokenId: number) => String.raw`
-      self.__next_f.push([1,"{\"nft\":{\"id\":${tokenId},\"owner\":\"0x0000000000000000000000000000000000000001\",\"seed\":\"seed-${tokenId}\"},\"buyOffers\":[],\"sellOffers\":[]}"]);
-    `;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: string | URL | Request) => {
-        const tokenId = Number(String(input).split("/").pop());
-        return new Response(detailHtml(tokenId));
-      }),
-    );
+    vi.stubGlobal("fetch", routedFetchMock(randomWalkApiRoutes()));
 
     const page = await getMarketplaceTokenPage({
       collection: "random-walk",
@@ -424,7 +447,10 @@ describe("marketplace queries", () => {
     };
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => new Response(JSON.stringify(cosmicMetadata))),
+      routedFetchMock([
+        [/\/metadata\/10$/, () => jsonResponse(cosmicMetadata)],
+        [/\/api\/cosmicgame\//, () => new Response("", { status: 503 })],
+      ]),
     );
 
     await expect(getTokenMarket("cosmic-signature", 10)).resolves.toMatchObject(
@@ -471,9 +497,6 @@ describe("marketplace queries", () => {
   });
 
   it("loads a small token discovery page from token search", async () => {
-    const detailHtml = String.raw`
-      self.__next_f.push([1,"{\"nft\":{\"id\":9,\"owner\":\"0x0000000000000000000000000000000000000001\",\"seed\":\"seed\"},\"buyOffers\":[{\"id\":2,\"offerId\":2,\"tokenId\":9,\"seller\":\"0x0000000000000000000000000000000000000000\",\"buyer\":\"0x0000000000000000000000000000000000000002\",\"price\":0.2,\"active\":true,\"createdAt\":\"2026-01-02T00:00:00.000Z\",\"createdAtTimestamp\":1,\"kind\":\"buy\"}],\"sellOffers\":[]}"]);
-    `;
     contractMocks.fetchContractOffersForTokenId.mockResolvedValueOnce([
       {
         id: "contract-bid",
@@ -485,10 +508,7 @@ describe("marketplace queries", () => {
         createdAt: "1970-01-01T00:00:00.000Z",
       },
     ]);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => new Response(detailHtml)),
-    );
+    vi.stubGlobal("fetch", routedFetchMock(randomWalkApiRoutes()));
 
     const page = await getMarketplaceTokenPage({
       collection: "random-walk",
@@ -510,14 +530,7 @@ describe("marketplace queries", () => {
 
   it("builds discovery pages from the live minted token index", async () => {
     indexMocks.getCollectionTokenIds.mockResolvedValue([5, 7]);
-    const fetchMock = vi.fn(async (input: string | URL | Request) => {
-      const tokenId = Number(String(input).split("/").pop());
-      const detailHtml = String.raw`
-        self.__next_f.push([1,"{\"nft\":{\"id\":${tokenId},\"owner\":\"0x0000000000000000000000000000000000000001\",\"seed\":\"seed-${tokenId}\"},\"buyOffers\":[],\"sellOffers\":[]}"]);
-      `;
-
-      return new Response(detailHtml);
-    });
+    const fetchMock = routedFetchMock(randomWalkApiRoutes());
     vi.stubGlobal("fetch", fetchMock);
 
     const page = await getMarketplaceTokenPage({
@@ -532,7 +545,8 @@ describe("marketplace queries", () => {
       totalPages: 1,
     });
     expect(page.items.map((item) => item.token.tokenId)).toEqual([5, 7]);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // One tokens/info plus one tokens/history call per token.
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it("filters discover pages by listing status and price", async () => {
@@ -568,16 +582,7 @@ describe("marketplace queries", () => {
         createdAt: "2026-01-01T00:00:00.000Z",
       },
     ]);
-    const detailHtml = (tokenId: number) => String.raw`
-      self.__next_f.push([1,"{\"nft\":{\"id\":${tokenId},\"owner\":\"0x0000000000000000000000000000000000000001\",\"seed\":\"seed-${tokenId}\"},\"buyOffers\":[],\"sellOffers\":[]}"]);
-    `;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: string | URL | Request) => {
-        const tokenId = Number(String(input).split("/").pop());
-        return new Response(detailHtml(tokenId));
-      }),
-    );
+    vi.stubGlobal("fetch", routedFetchMock(randomWalkApiRoutes()));
 
     const page = await getMarketplaceTokenPage({
       collection: "random-walk",
@@ -617,16 +622,7 @@ describe("marketplace queries", () => {
       },
     ]);
     contractMocks.fetchContractOffersForTokenId.mockResolvedValue([]);
-    const detailHtml = (tokenId: number) => String.raw`
-      self.__next_f.push([1,"{\"nft\":{\"id\":${tokenId},\"owner\":\"0x0000000000000000000000000000000000000001\",\"seed\":\"seed-${tokenId}\"},\"buyOffers\":[],\"sellOffers\":[]}"]);
-    `;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: string | URL | Request) => {
-        const tokenId = Number(String(input).split("/").pop());
-        return new Response(detailHtml(tokenId));
-      }),
-    );
+    vi.stubGlobal("fetch", routedFetchMock(randomWalkApiRoutes()));
 
     const page = await getMarketplaceTokenPage({
       collection: "random-walk",
@@ -653,23 +649,30 @@ describe("marketplace queries", () => {
         createdAt: "1970-01-01T00:00:00.000Z",
       },
     ]);
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(new Response("", { status: 503 }))
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            name: "Random Walk #003456",
-            properties: { seed: "metadata-seed" },
-          }),
-        ),
-      );
-    vi.stubGlobal("fetch", fetchMock);
+    indexMocks.fetchCollectionTokenOwner.mockResolvedValue(
+      "0x00000000000000000000000000000000000000aa",
+    );
+    vi.stubGlobal(
+      "fetch",
+      routedFetchMock([
+        [/\/api\/randomwalk\/tokens\//, () => new Response("", { status: 503 })],
+        [
+          /randomwalknft-api\.com\/metadata\/3456$/,
+          () =>
+            jsonResponse({
+              name: "Random Walk #003456",
+              properties: { seed: "metadata-seed" },
+            }),
+        ],
+      ]),
+    );
 
     await expect(getTokenMarket("random-walk", 3456)).resolves.toMatchObject({
       token: {
         tokenId: 3456,
         seed: "metadata-seed",
+        // The zero-address metadata owner is replaced by the on-chain read.
+        owner: "0x00000000000000000000000000000000000000aa",
       },
       offers: [
         expect.objectContaining({
@@ -678,6 +681,34 @@ describe("marketplace queries", () => {
           priceEth: 0.8,
         }),
       ],
+    });
+    expect(indexMocks.fetchCollectionTokenOwner).toHaveBeenCalledWith({
+      collectionId: "random-walk",
+      tokenId: 3456,
+    });
+  });
+
+  it("keeps the zero-address owner when the on-chain read also fails", async () => {
+    indexMocks.getCollectionTokenIds.mockResolvedValueOnce([3456]);
+    indexMocks.fetchCollectionTokenOwner.mockRejectedValue(
+      new Error("RPC unavailable"),
+    );
+    vi.stubGlobal(
+      "fetch",
+      routedFetchMock([
+        [/\/api\/randomwalk\/tokens\//, () => new Response("", { status: 503 })],
+        [
+          /randomwalknft-api\.com\/metadata\/3456$/,
+          () => jsonResponse({ properties: { seed: "metadata-seed" } }),
+        ],
+      ]),
+    );
+
+    await expect(getTokenMarket("random-walk", 3456)).resolves.toMatchObject({
+      token: {
+        tokenId: 3456,
+        owner: "0x0000000000000000000000000000000000000000",
+      },
     });
   });
 
@@ -720,9 +751,6 @@ describe("marketplace queries", () => {
   });
 
   it("reads token markets, offers, and metadata fallback through query helpers", async () => {
-    const detailHtml = String.raw`
-      self.__next_f.push([1,"{\"nft\":{\"id\":9,\"owner\":\"0x0000000000000000000000000000000000000001\",\"seed\":\"seed\"},\"buyOffers\":[{\"id\":2,\"offerId\":2,\"tokenId\":9,\"seller\":\"0x0000000000000000000000000000000000000000\",\"buyer\":\"0x0000000000000000000000000000000000000002\",\"price\":0.2,\"active\":true,\"createdAt\":\"2026-01-02T00:00:00.000Z\",\"createdAtTimestamp\":1,\"kind\":\"buy\"}],\"sellOffers\":[]}"]);
-    `;
     const cosmicMetadata = {
       image: "cosmic.png",
       name: "Cosmic Signature #10",
@@ -732,23 +760,33 @@ describe("marketplace queries", () => {
         token_id: 10,
       },
     };
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(detailHtml))
-      .mockResolvedValueOnce(new Response("", { status: 404 }))
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ properties: { seed: "fallback" } })),
-      )
-      .mockResolvedValueOnce(new Response(JSON.stringify(cosmicMetadata)))
-      .mockResolvedValueOnce(new Response(JSON.stringify(cosmicMetadata)))
-      .mockResolvedValueOnce(new Response(JSON.stringify(cosmicMetadata)));
+    const fetchMock = routedFetchMock([
+      // Token 10 falls back to static metadata when the API is down. This
+      // route must precede the generic Random Walk routes below.
+      [
+        /\/api\/randomwalk\/tokens\/(?:info|history)\/10(?:$|\/)/,
+        () => new Response("", { status: 503 }),
+      ],
+      // Other Random Walk tokens (token 9) resolve through the Go API.
+      ...randomWalkApiRoutes(),
+      [
+        /randomwalknft-api\.com\/metadata\/10$/,
+        () => jsonResponse({ properties: { seed: "fallback" } }),
+      ],
+      // Cosmic Signature 10: metadata resolves, the API is down.
+      [
+        /nfts\.cosmicsignature\.com\/metadata\/10$/,
+        () => jsonResponse(cosmicMetadata),
+      ],
+      [/\/api\/cosmicgame\//, () => new Response("", { status: 503 })],
+    ]);
     contractMocks.fetchContractOffersForTokenId.mockResolvedValue([
       baseOffers[1],
     ]);
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(getTokenMarket("random-walk", 9)).resolves.toMatchObject({
-      token: { tokenId: 9 },
+      token: { tokenId: 9, seed: "seed-9" },
     });
     await expect(getOffersForToken("random-walk", 9)).resolves.toHaveLength(1);
     await expect(getToken("random-walk", 10)).resolves.toMatchObject({
@@ -758,6 +796,7 @@ describe("marketplace queries", () => {
       collectionId: "cosmic-signature",
       tokenId: 10,
       seed: "seed",
+      owner: "0x0000000000000000000000000000000000000003",
     });
     await expect(getOffersForToken("cosmic-signature", 10)).resolves.toEqual([
       baseOffers[1],

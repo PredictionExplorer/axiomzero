@@ -27,17 +27,24 @@ testing or deployment.
 Wallet connections require a real `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`.
 Deployments still build without it so the marketplace remains browsable, but a
 real project ID should be configured in Vercel for reliable WalletConnect QR and
-mobile wallet support. Marketplace reads use the existing Random Walk backend
+mobile wallet support. Marketplace reads use the collection Go backend APIs
 plus verified Arbitrum contract reads; keep the backend URLs and contract
 addresses in `env.example` aligned with production sources.
 
 ## Marketplace Architecture
 
 The UI reads normalized marketplace data through `src/app/api/marketplace/**`.
-Random Walk data is sourced from the existing backend that powers
-`randomwalknft.com`, while Cosmic Signature offers are read from the configured
-Arbitrum marketplace contract. Wallet actions are signed client-side with wagmi
-and viem, then the app refreshes server-rendered data after confirmations.
+Token identity, ownership, and provenance history come from each collection's
+Go backend JSON API (the same PredictionExplorer "webserv" that powers
+`randomwalknft.com` and `cosmicsignature.com`): Random Walk uses
+`tokens/info` and `tokens/history` on `api.randomwalknft.com:1443`, Cosmic
+Signature uses `cst/info`, `cst/transfers/all`, and `cst/list` under
+`/api/cosmicgame` on `nfts.cosmicsignature.com`. When an API is unreachable,
+tokens degrade to static metadata enriched with an on-chain `ownerOf` read so
+ownership never renders as the zero address. Listings, bids, and sales are
+always read from the verified Arbitrum marketplace contract. Wallet actions
+are signed client-side with wagmi and viem, then the app refreshes
+server-rendered data after confirmations.
 
 ## Quality Gates
 

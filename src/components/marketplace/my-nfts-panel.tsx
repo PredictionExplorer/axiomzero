@@ -34,6 +34,10 @@ import { formatEth, formatTokenId } from "@/lib/utils";
 
 const OWNER_SCAN_CHUNK_SIZE = 180;
 const MAX_DETAIL_LOAD = 48;
+const OWNED_TOKEN_API_PAGE_SIZE = 1_000;
+const COSMIC_SIGNATURE_API_URL =
+  process.env.NEXT_PUBLIC_COSMIC_SIGNATURE_API_URL ??
+  "https://nfts.cosmicsignature.com";
 
 type CollectionScanConfig = Pick<
   Collection,
@@ -119,6 +123,41 @@ async function loadTokenMarket(collectionId: string, tokenId: number) {
   }
 
   return (await response.json()) as TokenMarketResponse;
+}
+
+/**
+ * Owned Cosmic Signature tokens straight from the collection's Go API (CORS
+ * is open), which spares the wallet RPC a balanceOf + enumeration multicall.
+ */
+async function readCosmicSignatureOwnedTokenIds(owner: `0x${string}`) {
+  const response = await fetch(
+    `${COSMIC_SIGNATURE_API_URL}/api/cosmicgame/cst/list/by_user/${owner}/0/${OWNED_TOKEN_API_PAGE_SIZE}`,
+    { headers: { Accept: "application/json" } },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Cosmic Signature owned-token lookup returned ${response.status}.`,
+    );
+  }
+
+  const payload = (await response.json()) as {
+    status?: number;
+    UserTokens?: Array<{ TokenId?: unknown }> | null;
+  };
+
+  if (payload.status !== 1) {
+    throw new Error("Cosmic Signature owned-token lookup failed.");
+  }
+
+  const tokenIds = (payload.UserTokens ?? [])
+    .map((token) => token.TokenId)
+    .filter(
+      (tokenId): tokenId is number =>
+        typeof tokenId === "number" && Number.isSafeInteger(tokenId),
+    );
+
+  return [...new Set(tokenIds)].sort((left, right) => left - right);
 }
 
 async function readEnumerableTokenIds({
@@ -263,6 +302,50 @@ async function scanOwnerOfRange({
   return ownedTokenIds.slice(0, MAX_DETAIL_LOAD);
 }
 
+/**
+ * Owned token ids for one collection: collection API first where one exists,
+ * then ERC-721 enumeration, then a chunked ownerOf range scan.
+ */
+async function resolveOwnedTokenIds({
+  client,
+  collection,
+  owner,
+  onProgress,
+}: {
+  client: ContractReadClient;
+  collection: CollectionScanConfig;
+  owner: `0x${string}`;
+  onProgress: (message: string) => void;
+}) {
+  if (collection.id === "cosmic-signature") {
+    try {
+      return await readCosmicSignatureOwnedTokenIds(owner);
+    } catch {
+      // Fall through to on-chain reads when the collection API is down.
+    }
+  }
+
+  try {
+    return await readEnumerableTokenIds({ client, collection, owner });
+  } catch {
+    let indexedTokenIds: number[] | undefined;
+
+    try {
+      indexedTokenIds = await readIndexedTokenIds({ client, collection });
+    } catch {
+      indexedTokenIds = undefined;
+    }
+
+    return scanOwnerOfRange({
+      client,
+      collection,
+      owner,
+      tokenIds: indexedTokenIds,
+      onProgress,
+    });
+  }
+}
+
 export function MyNftsPanel({
   collections,
 }: {
@@ -316,34 +399,12 @@ export function MyNftsPanel({
         await Promise.all(
           collections.map(async (collection) => {
             setStatus(`Reading ${collection.shortName} ownership.`);
-            let ownedTokenIds: number[];
-
-            try {
-              ownedTokenIds = await readEnumerableTokenIds({
-                client: publicClient,
-                collection,
-                owner: address,
-              });
-            } catch {
-              let indexedTokenIds: number[] | undefined;
-
-              try {
-                indexedTokenIds = await readIndexedTokenIds({
-                  client: publicClient,
-                  collection,
-                });
-              } catch {
-                indexedTokenIds = undefined;
-              }
-
-              ownedTokenIds = await scanOwnerOfRange({
-                client: publicClient,
-                collection,
-                owner: address,
-                tokenIds: indexedTokenIds,
-                onProgress: setStatus,
-              });
-            }
+            const ownedTokenIds = await resolveOwnedTokenIds({
+              client: publicClient,
+              collection,
+              owner: address,
+              onProgress: setStatus,
+            });
 
             const uniqueTokenIds = [...new Set(ownedTokenIds)].slice(
               0,

@@ -1,18 +1,23 @@
-import type {
-  MarketOffer,
-  MarketToken,
-  OfferKind,
-  SortKey,
-  TokenArtwork,
-  TokenHistoryRecord,
-} from "@/lib/marketplace/types";
-import { isDisplayableOffer } from "@/lib/marketplace/offers";
 import { z } from "zod";
 
-const RANDOM_WALK_SITE_URL =
-  process.env.RANDOM_WALK_SITE_URL ??
-  process.env.NEXT_PUBLIC_RANDOM_WALK_SITE_URL ??
-  "https://randomwalknft.com";
+import type {
+  MarketToken,
+  TokenArtwork,
+  TokenHistoryEventKind,
+  TokenHistoryRecord,
+  TokenMediaAssets,
+} from "@/lib/marketplace/types";
+import { participantAddress, ZERO_ADDRESS } from "@/lib/marketplace/eth";
+import { fetchGoApiJson } from "@/lib/marketplace/go-api";
+import { logMarketplaceDegradation } from "@/lib/marketplace/log";
+
+/**
+ * Random Walk data comes straight from the collection's Go backend (the same
+ * API that powers randomwalknft.com): `tokens/info` for current ownership and
+ * `tokens/history` for full provenance. Media URLs are deterministic per
+ * token id on the same host.
+ */
+
 const RANDOM_WALK_API_URL =
   process.env.RANDOM_WALK_API_URL ??
   process.env.NEXT_PUBLIC_RANDOM_WALK_API_URL ??
@@ -21,10 +26,8 @@ const RANDOM_WALK_METADATA_URL =
   process.env.RANDOM_WALK_METADATA_URL ??
   process.env.NEXT_PUBLIC_RANDOM_WALK_METADATA_URL ??
   "https://randomwalknft-api.com";
-const ZERO_ADDRESS =
-  "0x0000000000000000000000000000000000000000" as `0x${string}`;
 const RANDOM_WALK_REFRESH_SECONDS = 60;
-const RANDOM_WALK_TIMEOUT_MS = 8_000;
+const RANDOM_WALK_HISTORY_PAGE_SIZE = 1_000;
 
 const randomWalkMetadataSchema = z.object({
   animation_url: z.string().optional(),
@@ -41,103 +44,79 @@ const randomWalkMetadataSchema = z.object({
   properties: z.object({ seed: z.string().optional() }).optional(),
 });
 
-const randomWalkRawOfferSchema = z.object({
-  id: z.number(),
-  offerId: z.number(),
-  tokenId: z.number(),
-  seller: z.string(),
-  buyer: z.string(),
-  price: z.number(),
-  active: z.boolean(),
-  createdAt: z.string(),
-  createdAtTimestamp: z.number(),
-  kind: z.enum(["sell", "buy"]),
-});
-
-const randomWalkRawHistorySchema = z.object({
-  recordType: z.number(),
-  blockNumber: z.number(),
-  timestamp: z.number(),
-  dateTime: z.string(),
-  owner: z.string().optional(),
-  seller: z.string().optional(),
-  buyer: z.string().optional(),
-  price: z.number().optional(),
-  offerId: z.union([z.number(), z.string()]).optional(),
-});
-
-const randomWalkDetailPayloadSchema = z.object({
-  nft: z.object({
-    id: z.number(),
-    name: z.string().optional(),
-    owner: z.string(),
-    seed: z.string(),
-    rating: z.number().optional(),
-    assets: z
-      .object({
-        blackImage: z.string().optional(),
-        blackThumb: z.string().optional(),
-        blackSingleVideo: z.string().optional(),
-        blackTripleVideo: z.string().optional(),
-        whiteImage: z.string().optional(),
-        whiteThumb: z.string().optional(),
-        whiteSingleVideo: z.string().optional(),
-        whiteTripleVideo: z.string().optional(),
-      })
-      .optional(),
-    tokenHistory: z.array(randomWalkRawHistorySchema).optional(),
-    mintedAt: z.string().optional(),
+const randomWalkTokenInfoResponseSchema = z.object({
+  TokenInfo: z.object({
+    TokenId: z.number(),
+    CurOwnerAddr: z.string(),
+    SeedHex: z.string(),
+    CurName: z.string().optional(),
   }),
-  buyOffers: z.array(randomWalkRawOfferSchema).optional(),
-  sellOffers: z.array(randomWalkRawOfferSchema).optional(),
+});
+
+/**
+ * One provenance record from `tokens/history`. Field presence varies by
+ * RecordType (mints carry OwnerAddr, transfers FromAddr/ToAddr, marketplace
+ * records Buyer/Seller/OfferId), so everything event-specific is optional.
+ */
+const randomWalkHistoryEntrySchema = z.object({
+  RecordType: z.number(),
+  Record: z
+    .object({
+      BlockNum: z.number().optional(),
+      TimeStamp: z.number(),
+      DateTime: z.string(),
+      OwnerAddr: z.string().optional(),
+      SellerAddr: z.string().optional(),
+      BuyerAddr: z.string().optional(),
+      FromAddr: z.string().optional(),
+      ToAddr: z.string().optional(),
+      Price: z.number().optional(),
+      OfferId: z.number().optional(),
+      OfferType: z.number().optional(),
+      TokenName: z.string().optional(),
+    })
+    .passthrough(),
+});
+
+const randomWalkTokenHistoryResponseSchema = z.object({
+  // The Go backend encodes a nil slice as JSON null.
+  TokenHistory: z.array(randomWalkHistoryEntrySchema).nullish(),
 });
 
 type RandomWalkMetadata = z.infer<typeof randomWalkMetadataSchema>;
 
-type RandomWalkRawOffer = z.infer<typeof randomWalkRawOfferSchema>;
-
-type RandomWalkRawHistory = z.infer<typeof randomWalkRawHistorySchema>;
-
-async function fetchWithTimeout(
-  input: string,
-  init: RequestInit & { next?: { revalidate: number } },
-) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), RANDOM_WALK_TIMEOUT_MS);
-
-  try {
-    return await fetch(input, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function decodeFlightMarkup(html: string) {
-  return html.replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/&amp;/g, "&");
-}
-
-function isAxiomZeroMarketplaceHtml(html: string) {
-  return (
-    html.includes("axiomzero.market") ||
-    html.includes("/token/random-walk/") ||
-    html.includes("Axiom Zero")
-  );
-}
+export type RandomWalkHistoryEntry = z.infer<
+  typeof randomWalkHistoryEntrySchema
+>;
 
 function formatRandomWalkName(tokenId: number) {
   return `Random Walk #${String(tokenId).padStart(6, "0")}`;
 }
 
-function thumbUrl(tokenId: number) {
-  return `${RANDOM_WALK_API_URL}/images/randomwalk/${String(tokenId).padStart(
-    6,
-    "0",
-  )}_black_thumb.jpg`;
+function randomWalkApiPath(path: string) {
+  return `${RANDOM_WALK_API_URL}/api/randomwalk/${path}`;
+}
+
+/** Full media set served by the Random Walk backend, keyed by token id. */
+export function randomWalkAssets(tokenId: number): Required<TokenMediaAssets> {
+  const fileName = String(tokenId).padStart(6, "0");
+  const base = `${RANDOM_WALK_API_URL}/images/randomwalk/${fileName}`;
+
+  return {
+    blackImage: `${base}_black.png`,
+    blackThumb: `${base}_black_thumb.jpg`,
+    blackSingleVideo: `${base}_black_single.mp4`,
+    blackTripleVideo: `${base}_black_triple.mp4`,
+    whiteImage: `${base}_white.png`,
+    whiteThumb: `${base}_white_thumb.jpg`,
+    whiteSingleVideo: `${base}_white_single.mp4`,
+    whiteTripleVideo: `${base}_white_triple.mp4`,
+  };
 }
 
 export function randomWalkArtwork(tokenId: number): TokenArtwork {
   return {
-    image: thumbUrl(tokenId),
+    image: randomWalkAssets(tokenId).blackThumb,
     alt: `${formatRandomWalkName(tokenId)} artwork`,
   };
 }
@@ -159,231 +138,123 @@ export function randomWalkTokenPreview(tokenId: number): MarketToken {
   };
 }
 
-function coerceAddress(value: string | undefined): `0x${string}` | undefined {
-  if (value?.startsWith("0x") && value.length === 42) {
-    return value as `0x${string}`;
+/**
+ * RecordType values observed on the live backend: 1 mint, 2 offer created
+ * (OfferType 1 = sell listing, 0 = buy bid), 3 offer canceled, 4 item bought,
+ * 5 token renamed, 6 transfer. Unknown types map to "other" so new backend
+ * record types degrade to a generic entry instead of breaking parsing.
+ */
+function randomWalkHistoryKind(
+  recordType: number,
+  offerType: number | undefined,
+): TokenHistoryEventKind {
+  switch (recordType) {
+    case 1:
+      return "mint";
+    case 2:
+      return offerType === 1 ? "listing" : "bid";
+    case 3:
+      return "offer-canceled";
+    case 4:
+      return "sale";
+    case 5:
+      return "named";
+    case 6:
+      return "transfer";
+    default:
+      return "other";
   }
-
-  return undefined;
 }
 
-function normalizeUndefined<T>(value: T): T | undefined {
-  return value === "$undefined" ? undefined : value;
-}
-
-function extractJsonObjectAt(text: string, start: number) {
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-
-  for (let index = start; index < text.length; index += 1) {
-    const char = text[index];
-
-    if (inString) {
-      if (escaped) {
-        escaped = false;
-      } else if (char === "\\") {
-        escaped = true;
-      } else if (char === '"') {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (char === '"') {
-      inString = true;
-    } else if (char === "{") {
-      depth += 1;
-    } else if (char === "}") {
-      depth -= 1;
-      if (depth === 0) {
-        return text.slice(start, index + 1);
-      }
-    }
-  }
-
-  return undefined;
-}
-
-function normalizeHistory(
-  records: RandomWalkRawHistory[] = [],
+export function normalizeRandomWalkHistory(
+  entries: readonly RandomWalkHistoryEntry[] = [],
 ): TokenHistoryRecord[] {
-  return records.map((record) => ({
-    recordType: record.recordType,
-    blockNumber: record.blockNumber,
-    timestamp: record.timestamp,
-    dateTime: record.dateTime,
-    owner: coerceAddress(normalizeUndefined(record.owner)),
-    seller: coerceAddress(normalizeUndefined(record.seller)),
-    buyer: coerceAddress(normalizeUndefined(record.buyer)),
-    price: record.price,
-    offerId:
-      typeof record.offerId === "number"
-        ? record.offerId
-        : Number.isFinite(Number(record.offerId))
-          ? Number(record.offerId)
-          : undefined,
+  return entries.map(({ RecordType, Record }) => ({
+    kind: randomWalkHistoryKind(RecordType, Record.OfferType),
+    recordType: RecordType,
+    blockNumber: Record.BlockNum ?? 0,
+    timestamp: Record.TimeStamp,
+    dateTime: Record.DateTime,
+    owner: participantAddress(Record.OwnerAddr),
+    seller: participantAddress(Record.SellerAddr),
+    buyer: participantAddress(Record.BuyerAddr),
+    from: participantAddress(Record.FromAddr),
+    to: participantAddress(Record.ToAddr),
+    price:
+      typeof Record.Price === "number" && Number.isFinite(Record.Price)
+        ? Record.Price
+        : undefined,
+    offerId: Record.OfferId,
+    name: Record.TokenName,
   }));
 }
 
-function normalizeOffer(
-  offer: RandomWalkRawOffer,
-  artwork?: MarketOffer["artwork"],
-): MarketOffer {
-  const maker = coerceAddress(
-    offer.kind === "sell" ? offer.seller : offer.buyer,
-  );
-  const taker = coerceAddress(
-    offer.kind === "sell" ? offer.buyer : offer.seller,
+async function fetchRandomWalkTokenInfo(tokenId: number) {
+  const response = await fetchGoApiJson(
+    randomWalkApiPath(`tokens/info/${tokenId}`),
+    randomWalkTokenInfoResponseSchema,
+    { revalidate: RANDOM_WALK_REFRESH_SECONDS },
   );
 
+  return response.TokenInfo;
+}
+
+export async function fetchRandomWalkTokenHistory(
+  tokenId: number,
+): Promise<TokenHistoryRecord[]> {
+  const response = await fetchGoApiJson(
+    randomWalkApiPath(
+      `tokens/history/${tokenId}/0/${RANDOM_WALK_HISTORY_PAGE_SIZE}`,
+    ),
+    randomWalkTokenHistoryResponseSchema,
+    { revalidate: RANDOM_WALK_REFRESH_SECONDS },
+  );
+
+  return normalizeRandomWalkHistory(response.TokenHistory ?? []);
+}
+
+/**
+ * Canonical token detail from the Random Walk Go API. Ownership and seed come
+ * from `tokens/info`; provenance and the mint date from `tokens/history`. A
+ * history failure degrades to a token without provenance rather than failing
+ * the whole detail load.
+ */
+export async function fetchRandomWalkTokenDetail(
+  tokenId: number,
+): Promise<MarketToken> {
+  const [info, tokenHistory] = await Promise.all([
+    fetchRandomWalkTokenInfo(tokenId),
+    fetchRandomWalkTokenHistory(tokenId).catch((error) => {
+      logMarketplaceDegradation(
+        `random-walk token ${tokenId} history unavailable`,
+        error,
+      );
+      return undefined;
+    }),
+  ]);
+  const assets = randomWalkAssets(info.TokenId);
+  const mintedAt = tokenHistory?.find((record) => record.kind === "mint")
+    ?.dateTime;
+  const rating = 0;
+
   return {
-    id: `${offer.kind}-${offer.offerId}`,
-    offerId: offer.offerId,
     collectionId: "random-walk",
-    tokenId: offer.tokenId,
-    kind: offer.kind,
-    priceEth: offer.price,
-    maker: maker ?? ZERO_ADDRESS,
-    taker,
-    createdAt: offer.createdAt,
-    active: offer.active,
-    artwork,
-  };
-}
-
-export function parseRandomWalkMarketplaceHtml(
-  html: string,
-  requestedKind: OfferKind = "sell",
-): MarketOffer[] {
-  const decoded = decodeFlightMarkup(html);
-  const offers = new Map<string, MarketOffer>();
-  const visibleKeys = new Set<string>();
-  const cardPattern =
-    /"(sell|buy)-(\d+)"[\s\S]{0,900}?"id":(\d+),"image":"([^"]+)"[\s\S]{0,1000}?"children":\["#\d{6}"," · ","([0-9]+(?:\.[0-9]+)?) ETH"\]/g;
-
-  for (const match of decoded.matchAll(cardPattern)) {
-    const [, kind, offerId, tokenId, image, price] = match;
-    const parsedKind = kind as OfferKind;
-    const parsedTokenId = Number(tokenId);
-    const parsedOfferId = Number(offerId);
-
-    if (
-      parsedKind !== requestedKind ||
-      !Number.isFinite(parsedTokenId) ||
-      match[0]?.includes("</script>")
-    ) {
-      continue;
-    }
-
-    const offer: MarketOffer = {
-      id: `${parsedKind}-${parsedOfferId}-${parsedTokenId}-${price}`,
-      offerId: Number.isFinite(parsedOfferId) ? parsedOfferId : undefined,
-      collectionId: "random-walk",
-      tokenId: parsedTokenId,
-      kind: parsedKind,
-      priceEth: Number(price),
-      maker: ZERO_ADDRESS,
-      createdAt: "1970-01-01T00:00:00.000Z",
-      active: true,
-      artwork: {
-        image,
-        alt: `${formatRandomWalkName(parsedTokenId)} thumbnail`,
-      },
-    };
-
-    offers.set(`${offer.id}-${image}`, offer);
-    visibleKeys.add(`${parsedKind}-${parsedTokenId}-${price}`);
-  }
-
-  const renderedCardPattern =
-    /<a href="\/detail\/(\d+)">[\s\S]{0,1400}?<img[^>]+src="([^"]+)"[\s\S]{0,1800}?(Sell listing|Buy offer)<\/div><span[^>]*>#\d{6}<!-- --> · <!-- -->([0-9]+(?:\.[0-9]+)?) ETH<\/span>/g;
-
-  for (const match of decoded.matchAll(renderedCardPattern)) {
-    const [, tokenId, image, label, price] = match;
-    const parsedKind: OfferKind = label === "Buy offer" ? "buy" : "sell";
-    const parsedTokenId = Number(tokenId);
-    const visibleKey = `${parsedKind}-${parsedTokenId}-${price}`;
-
-    if (
-      parsedKind !== requestedKind ||
-      !Number.isFinite(parsedTokenId) ||
-      visibleKeys.has(visibleKey)
-    ) {
-      continue;
-    }
-
-    const offer: MarketOffer = {
-      id: `${parsedKind}-rendered-${parsedTokenId}-${price}`,
-      collectionId: "random-walk",
-      tokenId: parsedTokenId,
-      kind: parsedKind,
-      priceEth: Number(price),
-      maker: ZERO_ADDRESS,
-      createdAt: "1970-01-01T00:00:00.000Z",
-      active: true,
-      artwork: {
-        image,
-        alt: `${formatRandomWalkName(parsedTokenId)} thumbnail`,
-      },
-    };
-
-    offers.set(`${offer.id}-${image}`, offer);
-    visibleKeys.add(visibleKey);
-  }
-
-  return [...offers.values()];
-}
-
-export function parseRandomWalkDetailHtml(html: string): {
-  token: MarketToken;
-  offers: MarketOffer[];
-} {
-  const decoded = decodeFlightMarkup(html);
-  const payloadStart = decoded.indexOf('{"nft":');
-  const payloadText =
-    payloadStart >= 0 ? extractJsonObjectAt(decoded, payloadStart) : undefined;
-
-  if (!payloadText) {
-    throw new Error("Random Walk detail payload was not found.");
-  }
-
-  const payload = randomWalkDetailPayloadSchema.parse(JSON.parse(payloadText));
-  const tokenId = payload.nft.id;
-  const artwork = {
-    image:
-      payload.nft.assets?.blackImage ??
-      payload.nft.assets?.blackThumb ??
-      randomWalkArtwork(tokenId).image,
-    alt: `${formatRandomWalkName(tokenId)} artwork`,
-  };
-  const offers = [...(payload.sellOffers ?? []), ...(payload.buyOffers ?? [])]
-    .map((offer) => normalizeOffer(offer, artwork))
-    .filter(isDisplayableOffer);
-
-  return {
-    token: {
-      collectionId: "random-walk",
-      tokenId,
-      name: payload.nft.name?.trim() || formatRandomWalkName(tokenId),
-      owner: coerceAddress(payload.nft.owner) ?? ZERO_ADDRESS,
-      seed: payload.nft.seed,
-      traits: [
-        {
-          label: "Beauty score",
-          value: (payload.nft.rating ?? 0).toFixed(2),
-        },
-        ...(payload.nft.mintedAt
-          ? [{ label: "Minted", value: payload.nft.mintedAt }]
-          : []),
-      ],
-      artwork,
-      assets: payload.nft.assets,
-      rating: payload.nft.rating,
-      mintedAt: payload.nft.mintedAt,
-      tokenHistory: normalizeHistory(payload.nft.tokenHistory),
+    tokenId: info.TokenId,
+    name: info.CurName?.trim() || formatRandomWalkName(info.TokenId),
+    owner: participantAddress(info.CurOwnerAddr) ?? ZERO_ADDRESS,
+    seed: info.SeedHex,
+    traits: [
+      { label: "Beauty score", value: rating.toFixed(2) },
+      ...(mintedAt ? [{ label: "Minted", value: mintedAt }] : []),
+    ],
+    artwork: {
+      image: assets.blackImage,
+      alt: `${formatRandomWalkName(info.TokenId)} artwork`,
     },
-    offers,
+    assets,
+    rating,
+    mintedAt,
+    tokenHistory,
   };
 }
 
@@ -419,85 +290,25 @@ export function tokenFromRandomWalkMetadata(
   };
 }
 
-export async function fetchRandomWalkMarketplaceOffers(
-  kind: OfferKind = "sell",
-  sort: SortKey = "price-asc",
-) {
-  const params = new URLSearchParams();
-
-  if (kind === "buy") {
-    params.set("filter", "buy");
-  }
-
-  if (sort !== "price-asc") {
-    params.set("sort", sort);
-  }
-
-  const response = await fetchWithTimeout(
-    `${RANDOM_WALK_SITE_URL}/marketplace${
-      params.size ? `?${params.toString()}` : ""
-    }`,
-    { next: { revalidate: RANDOM_WALK_REFRESH_SECONDS } },
-  );
-
-  if (!response.ok) {
-    throw new Error(`Random Walk marketplace returned ${response.status}.`);
-  }
-
-  if (response.redirected || response.url.includes("axiomzero.market")) {
-    throw new Error(
-      "Random Walk marketplace redirected away from the collection source.",
-    );
-  }
-
-  const html = await response.text();
-  const offers = parseRandomWalkMarketplaceHtml(html, kind);
-
-  if (!offers.length && isAxiomZeroMarketplaceHtml(html)) {
-    throw new Error(
-      "Random Walk marketplace returned Axiom Zero HTML instead of marketplace data.",
-    );
-  }
-
-  return offers;
-}
-
-export async function fetchRandomWalkTokenDetail(tokenId: number) {
-  const response = await fetchWithTimeout(
-    `${RANDOM_WALK_SITE_URL}/detail/${tokenId}`,
-    {
-      next: { revalidate: RANDOM_WALK_REFRESH_SECONDS },
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error(`Random Walk token detail returned ${response.status}.`);
-  }
-
-  return parseRandomWalkDetailHtml(await response.text());
-}
-
+/**
+ * Static metadata fallback for when the Go API is unreachable. It has no
+ * ownership, mint date, or provenance data; callers enrich the owner from the
+ * chain where possible.
+ */
 export async function fetchRandomWalkMetadata(tokenId: number) {
   const metadataUrls = [
     `${RANDOM_WALK_METADATA_URL}/metadata/${tokenId}`,
-    `${RANDOM_WALK_API_URL}/api/randomwalk/metadata/${tokenId}`,
+    randomWalkApiPath(`metadata/${tokenId}`),
   ];
   let lastError: Error | undefined;
 
   for (const url of [...new Set(metadataUrls)]) {
     try {
-      const response = await fetchWithTimeout(url, {
-        next: { revalidate: RANDOM_WALK_REFRESH_SECONDS },
+      const metadata = await fetchGoApiJson(url, randomWalkMetadataSchema, {
+        revalidate: RANDOM_WALK_REFRESH_SECONDS,
       });
 
-      if (!response.ok) {
-        throw new Error(`Random Walk metadata returned ${response.status}.`);
-      }
-
-      return tokenFromRandomWalkMetadata(
-        tokenId,
-        randomWalkMetadataSchema.parse(await response.json()),
-      );
+      return tokenFromRandomWalkMetadata(tokenId, metadata);
     } catch (error) {
       lastError =
         error instanceof Error

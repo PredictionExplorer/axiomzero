@@ -109,36 +109,53 @@ function videoForTheme(
 }
 
 function historyTitle(record: TokenHistoryRecord) {
-  const zeroAddress = "0x0000000000000000000000000000000000000000";
-  const hasPrice = record.price !== undefined && record.price > 0;
-  const hasBuyer = Boolean(record.buyer && record.buyer !== zeroAddress);
-  const hasSeller = Boolean(record.seller && record.seller !== zeroAddress);
-
-  if (hasPrice && hasBuyer && hasSeller) {
-    return "Sale";
+  switch (record.kind) {
+    case "mint":
+      return "Mint";
+    case "transfer":
+      return "Transfer";
+    case "listing":
+      return "Listed for sale";
+    case "bid":
+      return "Bid placed";
+    case "sale":
+      return "Sale";
+    case "offer-canceled":
+      return "Offer canceled";
+    case "named":
+      return "Renamed";
+    default:
+      return `Record ${record.recordType}`;
   }
-  if (hasPrice && hasBuyer) {
-    return "Mint";
-  }
-  if (record.owner) {
-    return "Transfer";
-  }
-
-  return `Record ${record.recordType}`;
 }
 
 function participantSummary(record: TokenHistoryRecord) {
+  if (record.kind === "named" && record.name) {
+    return `Named "${record.name}"`;
+  }
+  if (record.from && record.to) {
+    return `${shortenAddress(record.from)} to ${shortenAddress(record.to)}`;
+  }
   if (record.buyer && record.seller) {
     return `${shortenAddress(record.seller)} to ${shortenAddress(record.buyer)}`;
+  }
+  if (record.kind === "mint" && record.owner) {
+    return `Minted to ${shortenAddress(record.owner)}`;
+  }
+  if (record.kind === "mint" && record.to) {
+    return `Minted to ${shortenAddress(record.to)}`;
   }
   if (record.buyer) {
     return `Buyer ${shortenAddress(record.buyer)}`;
   }
+  if (record.seller) {
+    return `Seller ${shortenAddress(record.seller)}`;
+  }
   if (record.owner) {
     return `Owner ${shortenAddress(record.owner)}`;
   }
-  if (record.seller) {
-    return `Seller ${shortenAddress(record.seller)}`;
+  if (record.to) {
+    return `To ${shortenAddress(record.to)}`;
   }
 
   return `Block ${record.blockNumber.toLocaleString("en-US")}`;
@@ -285,13 +302,20 @@ export function formatFullDate(value: string | undefined) {
     return "Unknown";
   }
 
+  const date = new Date(value);
+
+  // Malformed upstream timestamps must not crash rendering.
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown";
+  }
+
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
-  }).format(new Date(value));
+  }).format(date);
 }
 
 export function primaryTokenTrait(token: MarketToken) {
@@ -324,8 +348,8 @@ export function formatHistoryRecords(records: TokenHistoryRecord[] = []) {
   return records
     .slice()
     .reverse()
-    .map((record) => ({
-      key: `${record.blockNumber}-${record.timestamp}-${record.offerId ?? record.recordType}`,
+    .map((record, index) => ({
+      key: `${record.blockNumber}-${record.timestamp}-${record.kind}-${index}`,
       title: historyTitle(record),
       subtitle: participantSummary(record),
       date: formatFullDate(record.dateTime),

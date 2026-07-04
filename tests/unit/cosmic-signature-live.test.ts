@@ -4,9 +4,20 @@ import {
   cosmicSignatureImageUrl,
   cosmicSignatureThumbUrl,
   fetchCosmicSignatureMetadata,
+  fetchCosmicSignatureTokenDetail,
+  fetchCosmicSignatureTokenHistory,
+  fetchCosmicSignatureTokenIds,
+  normalizeCosmicSignatureHistory,
   tokenFromCosmicSignatureAppHtml,
   tokenFromCosmicSignatureMetadata,
 } from "@/lib/marketplace/cosmic-signature-live";
+import {
+  cosmicSignatureInfoResponse,
+  cosmicSignatureMetadataResponse,
+  cosmicSignatureTransfersResponse,
+  jsonResponse,
+  routedFetchMock,
+} from "../helpers/go-api-fixtures";
 
 const metadata = {
   animation_url:
@@ -171,5 +182,202 @@ describe("Cosmic Signature live data adapter", () => {
     await expect(fetchCosmicSignatureMetadata(1)).rejects.toThrow(
       "Cosmic Signature metadata returned 404.",
     );
+  });
+
+  it("normalizes newest-first transfers into chronological mint and transfer records", () => {
+    const history = normalizeCosmicSignatureHistory(
+      cosmicSignatureTransfersResponse(5).TokenTransfers,
+    );
+
+    expect(history).toHaveLength(2);
+    expect(history[0]).toMatchObject({
+      kind: "mint",
+      timestamp: 1781506802,
+      dateTime: "2026-06-15T07:00:02Z",
+      owner: "0x30E6E8EEEC88aA8Ea35B54807671458B3F01665e",
+      to: "0x30E6E8EEEC88aA8Ea35B54807671458B3F01665e",
+      from: undefined,
+    });
+    expect(history[1]).toMatchObject({
+      kind: "transfer",
+      timestamp: 1781712122,
+      from: "0x30E6E8EEEC88aA8Ea35B54807671458B3F01665e",
+      to: "0x6308A405B4FF1eA890870Efe2a6D036750B81F7C",
+    });
+  });
+
+  it("fetches token history from cst/transfers", async () => {
+    const fetchMock = routedFetchMock([
+      [
+        /\/api\/cosmicgame\/cst\/transfers\/all\/5\/0\/1000$/,
+        () => jsonResponse(cosmicSignatureTransfersResponse(5)),
+      ],
+    ]);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const history = await fetchCosmicSignatureTokenHistory(5);
+
+    expect(history.map((record) => record.kind)).toEqual([
+      "mint",
+      "transfer",
+    ]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://nfts.cosmicsignature.com/api/cosmicgame/cst/transfers/all/5/0/1000",
+      expect.objectContaining({ next: { revalidate: 60 } }),
+    );
+  });
+
+  it("composes token detail from metadata, cst/info, and transfers", async () => {
+    vi.stubGlobal(
+      "fetch",
+      routedFetchMock([
+        [
+          /\/metadata\/5$/,
+          () => jsonResponse(cosmicSignatureMetadataResponse(5)),
+        ],
+        [
+          /\/api\/cosmicgame\/cst\/info\/5$/,
+          () => jsonResponse(cosmicSignatureInfoResponse(5)),
+        ],
+        [
+          /\/api\/cosmicgame\/cst\/transfers\/all\/5\//,
+          () => jsonResponse(cosmicSignatureTransfersResponse(5)),
+        ],
+      ]),
+    );
+
+    const token = await fetchCosmicSignatureTokenDetail(5);
+
+    expect(token).toMatchObject({
+      collectionId: "cosmic-signature",
+      tokenId: 5,
+      name: "Cosmic Signature #5",
+      // cst/info is authoritative for the current owner.
+      owner: "0x6308A405B4FF1eA890870Efe2a6D036750B81F7C",
+      seed: "e29887e5f8aea85d6b775ab8dc95df16a5a0ad2979ace2b539058a0040aca67d",
+      mintedAt: "2026-06-15T07:00:02Z",
+    });
+    expect(token.tokenHistory?.map((record) => record.kind)).toEqual([
+      "mint",
+      "transfer",
+    ]);
+    expect(token.traits).toEqual(
+      expect.arrayContaining([{ label: "Staked", value: "Yes" }]),
+    );
+  });
+
+  it("keeps metadata ownership when cst/info is unavailable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      routedFetchMock([
+        [
+          /\/metadata\/5$/,
+          () => jsonResponse(cosmicSignatureMetadataResponse(5)),
+        ],
+        [
+          /\/api\/cosmicgame\/cst\/info\/5$/,
+          () => new Response("", { status: 503 }),
+        ],
+        [
+          /\/api\/cosmicgame\/cst\/transfers\/all\/5\//,
+          () => new Response("", { status: 503 }),
+        ],
+      ]),
+    );
+
+    const token = await fetchCosmicSignatureTokenDetail(5);
+
+    expect(token.owner).toBe("0x6308A405B4FF1eA890870Efe2a6D036750B81F7C");
+    expect(token.tokenHistory).toBeUndefined();
+    // The Imprinted metadata attribute still supplies the mint date.
+    expect(token.mintedAt).toBe(new Date(1781506802 * 1000).toISOString());
+  });
+
+  it("builds an API-only token when every metadata source fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      routedFetchMock([
+        [/\/metadata\/5$/, () => new Response("", { status: 500 })],
+        [
+          /app\.cosmicsignature\.com\/detail\/5$/,
+          () => new Response("", { status: 500 }),
+        ],
+        [
+          /\/api\/cosmicgame\/cst\/info\/5$/,
+          () => jsonResponse(cosmicSignatureInfoResponse(5)),
+        ],
+        [
+          /\/api\/cosmicgame\/cst\/transfers\/all\/5\//,
+          () => jsonResponse(cosmicSignatureTransfersResponse(5)),
+        ],
+      ]),
+    );
+
+    const token = await fetchCosmicSignatureTokenDetail(5);
+
+    expect(token).toMatchObject({
+      tokenId: 5,
+      name: "Cosmic Signature #5",
+      owner: "0x6308A405B4FF1eA890870Efe2a6D036750B81F7C",
+      artwork: {
+        image:
+          "https://nfts.cosmicsignature.com/images/new/cosmicsignature/0xe29887e5f8aea85d6b775ab8dc95df16a5a0ad2979ace2b539058a0040aca67d.png",
+      },
+      mintedAt: "2026-06-15T07:00:02Z",
+    });
+  });
+
+  it("fails token detail only when metadata and the API are both down", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("", { status: 500 })),
+    );
+
+    await expect(fetchCosmicSignatureTokenDetail(5)).rejects.toThrow(
+      "Cosmic Signature token 5 could not be loaded",
+    );
+  });
+
+  it("lists minted token ids ascending from cst/list", async () => {
+    vi.stubGlobal(
+      "fetch",
+      routedFetchMock([
+        [
+          /\/api\/cosmicgame\/cst\/list\/all\/0\/10000$/,
+          () =>
+            jsonResponse({
+              CosmicSignatureTokenList: [
+                { TokenId: 23 },
+                { TokenId: 22 },
+                { TokenId: 0 },
+                { TokenId: 22 },
+              ],
+              error: "",
+              status: 1,
+            }),
+        ],
+      ]),
+    );
+
+    await expect(fetchCosmicSignatureTokenIds()).resolves.toEqual([0, 22, 23]);
+  });
+
+  it("treats a null token list as empty", async () => {
+    vi.stubGlobal(
+      "fetch",
+      routedFetchMock([
+        [
+          /\/api\/cosmicgame\/cst\/list\/all\//,
+          () =>
+            jsonResponse({
+              CosmicSignatureTokenList: null,
+              error: "",
+              status: 1,
+            }),
+        ],
+      ]),
+    );
+
+    await expect(fetchCosmicSignatureTokenIds()).resolves.toEqual([]);
   });
 });

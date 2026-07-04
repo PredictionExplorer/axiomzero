@@ -21,8 +21,16 @@ import {
   fetchRandomWalkTokenDetail,
   randomWalkTokenPreview,
 } from "@/lib/marketplace/random-walk-live";
-import { fetchCosmicSignatureMetadata } from "@/lib/marketplace/cosmic-signature-live";
-import { getCollectionTokenIds } from "@/lib/marketplace/collection-index-live";
+import {
+  fetchCosmicSignatureMetadata,
+  fetchCosmicSignatureTokenDetail,
+} from "@/lib/marketplace/cosmic-signature-live";
+import {
+  fetchCollectionTokenOwner,
+  getCollectionTokenIds,
+} from "@/lib/marketplace/collection-index-live";
+import { isZeroAddress } from "@/lib/marketplace/eth";
+import { logMarketplaceDegradation } from "@/lib/marketplace/log";
 import {
   fetchCollectionContractOffers,
   fetchContractOffersForTokenId,
@@ -540,16 +548,61 @@ export async function getMarketplaceTokenPage(
   };
 }
 
-export async function getToken(collectionId: CollectionId, tokenId: number) {
+/**
+ * Fallback tokens built from static metadata carry no ownership data, so the
+ * owner is read from the NFT contract instead of rendering the zero address.
+ */
+async function withOnChainOwner(
+  collectionId: CollectionId,
+  tokenId: number,
+  token: MarketToken,
+): Promise<MarketToken> {
+  if (!isZeroAddress(token.owner)) {
+    return token;
+  }
+
+  try {
+    const owner = await fetchCollectionTokenOwner({ collectionId, tokenId });
+
+    return owner ? { ...token, owner } : token;
+  } catch (error) {
+    logMarketplaceDegradation(
+      `${collectionId} token ${tokenId} on-chain owner unavailable`,
+      error,
+    );
+    return token;
+  }
+}
+
+async function loadCollectionToken(
+  collectionId: CollectionId,
+  tokenId: number,
+): Promise<MarketToken> {
   if (collectionId === "random-walk") {
     try {
-      return (await fetchRandomWalkTokenDetail(tokenId)).token;
-    } catch {
-      return fetchRandomWalkMetadata(tokenId);
+      return await fetchRandomWalkTokenDetail(tokenId);
+    } catch (error) {
+      logMarketplaceDegradation(
+        `random-walk token ${tokenId} API detail unavailable, using metadata`,
+        error,
+      );
+      return withOnChainOwner(
+        collectionId,
+        tokenId,
+        await fetchRandomWalkMetadata(tokenId),
+      );
     }
   }
 
-  return fetchCosmicSignatureMetadata(tokenId);
+  return withOnChainOwner(
+    collectionId,
+    tokenId,
+    await fetchCosmicSignatureTokenDetail(tokenId),
+  );
+}
+
+export async function getToken(collectionId: CollectionId, tokenId: number) {
+  return loadCollectionToken(collectionId, tokenId);
 }
 
 const TOKEN_OFFERS_CACHE_TTL_MS = 30_000;
@@ -598,19 +651,10 @@ export async function getOffersForToken(
 ) {
   await assertMintedToken(collectionId, tokenId);
 
-  if (collectionId === "random-walk") {
-    try {
-      return await fetchContractOffersForCollectionToken(
-        collectionId,
-        tokenId,
-        randomWalkTokenPreview(tokenId),
-      );
-    } catch {
-      return (await fetchRandomWalkTokenDetail(tokenId)).offers;
-    }
-  }
-
-  const token = await fetchCosmicSignatureMetadata(tokenId);
+  const token =
+    collectionId === "random-walk"
+      ? randomWalkTokenPreview(tokenId)
+      : await fetchCosmicSignatureMetadata(tokenId);
 
   return fetchContractOffersForCollectionToken(collectionId, tokenId, token);
 }
@@ -637,40 +681,18 @@ async function loadTokenMarket(
 ): Promise<{ token: MarketToken; offers: MarketOffer[] }> {
   await assertMintedToken(collectionId, tokenId);
 
-  if (collectionId === "random-walk") {
-    try {
-      const market = await fetchRandomWalkTokenDetail(tokenId);
-      const offers = await fetchContractOffersForCollectionToken(
-        collectionId,
-        tokenId,
-        market.token,
-      ).catch(() => market.offers);
-
-      return { token: market.token, offers };
-    } catch {
-      const token = await fetchRandomWalkMetadata(tokenId);
-      const offers = await fetchContractOffersForCollectionToken(
-        collectionId,
-        tokenId,
-        token,
-      ).catch(() => []);
-
-      return {
-        token,
-        offers: offers.map((offer) => ({
-          ...offer,
-          artwork: offer.artwork ?? token.artwork,
-        })),
-      };
-    }
-  }
-
-  const token = await fetchCosmicSignatureMetadata(tokenId);
+  const token = await loadCollectionToken(collectionId, tokenId);
   const offers = await fetchContractOffersForCollectionToken(
     collectionId,
     tokenId,
     token,
-  ).catch(() => []);
+  ).catch((error) => {
+    logMarketplaceDegradation(
+      `${collectionId} token ${tokenId} contract offers unavailable`,
+      error,
+    );
+    return [];
+  });
 
   return { token, offers };
 }

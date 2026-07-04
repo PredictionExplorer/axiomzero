@@ -67,7 +67,23 @@ export type TokenMediaAssets = {
   whiteTripleVideo?: string;
 };
 
+/**
+ * Semantic event type of a provenance record, normalized across the
+ * per-collection Go backends. "other" covers record types the backend may add
+ * later; renderers must handle it.
+ */
+export type TokenHistoryEventKind =
+  | "mint"
+  | "transfer"
+  | "listing"
+  | "bid"
+  | "sale"
+  | "offer-canceled"
+  | "named"
+  | "other";
+
 export type TokenHistoryRecord = {
+  kind: TokenHistoryEventKind;
   recordType: number;
   blockNumber: number;
   timestamp: number;
@@ -75,8 +91,12 @@ export type TokenHistoryRecord = {
   owner?: `0x${string}`;
   seller?: `0x${string}`;
   buyer?: `0x${string}`;
+  from?: `0x${string}`;
+  to?: `0x${string}`;
   price?: number;
   offerId?: number;
+  /** New token name for "named" records. */
+  name?: string;
 };
 
 export type MarketToken = {
