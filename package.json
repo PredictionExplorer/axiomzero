@@ -13,6 +13,7 @@
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit",
     "format": "prettier . --write",
+    "icons:generate": "tsx scripts/generate-favicon-assets.ts",
     "test": "pnpm test:unit && pnpm test:e2e",
     "test:unit": "vitest run --coverage",
     "test:unit:watch": "vitest",
