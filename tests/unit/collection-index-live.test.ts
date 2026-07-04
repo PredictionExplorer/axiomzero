@@ -6,6 +6,8 @@ import {
   fetchCollectionSupply,
   fetchCollectionTokenOwner,
   fetchCollectionTokenUri,
+  getCollectionSupply,
+  getCollectionTokenIds,
   type Erc721IndexClient,
 } from "@/lib/marketplace/collection-index-live";
 import { requireCollection } from "@/config/collections";
@@ -197,6 +199,90 @@ describe("collection index live adapter", () => {
         client,
       }),
     ).resolves.toBeUndefined();
+  });
+
+  it("falls through to the chain when the Cosmic Signature API list is empty", async () => {
+    vi.stubGlobal(
+      "fetch",
+      routedFetchMock([
+        [
+          /\/api\/cosmicgame\/cst\/list\/all\//,
+          () =>
+            jsonResponse({
+              CosmicSignatureTokenList: [],
+              error: "",
+              status: 1,
+            }),
+        ],
+      ]),
+    );
+    const client = mockClient({ totalSupply: 2n, tokenIds: [0n, 1n] });
+
+    await expect(
+      fetchCollectionTokenIds({
+        collectionId: "cosmic-signature",
+        client,
+      }),
+    ).resolves.toEqual([0, 1]);
+    await expect(
+      fetchCollectionSupply({
+        collectionId: "cosmic-signature",
+        client,
+      }),
+    ).resolves.toBe(2);
+  });
+
+  it("falls back to configured token IDs when totalSupply is implausible", async () => {
+    const client = mockClient({ totalSupply: 2n ** 60n });
+
+    await expect(
+      fetchCollectionTokenIds({
+        collectionId: "random-walk",
+        client,
+      }),
+    ).resolves.toEqual(
+      fallbackCollectionTokenIds(requireCollection("random-walk")),
+    );
+    expect(client.multicall).not.toHaveBeenCalled();
+  });
+
+  it("returns an empty index for collections with zero supply", async () => {
+    const client = mockClient({ totalSupply: 0n });
+
+    await expect(
+      fetchCollectionTokenIds({
+        collectionId: "random-walk",
+        client,
+      }),
+    ).resolves.toEqual([]);
+    expect(client.multicall).not.toHaveBeenCalled();
+  });
+
+  it("does not guess supply when totalSupply is implausible", async () => {
+    const client = mockClient({ totalSupply: 2n ** 60n });
+
+    await expect(
+      fetchCollectionSupply({
+        collectionId: "random-walk",
+        client,
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("degrades the cached entry points gracefully when the RPC is offline", async () => {
+    // The default viem client goes through fetch; failing it exercises the
+    // real client construction without any network access.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("offline");
+      }),
+    );
+
+    await expect(getCollectionTokenIds("random-walk")).resolves.toEqual(
+      fallbackCollectionTokenIds(requireCollection("random-walk")),
+    );
+    await expect(getCollectionSupply("random-walk")).resolves.toBeUndefined();
   });
 
   it("reads collection token URIs from the NFT contract", async () => {

@@ -35,4 +35,38 @@ describe("eth usd pricing", () => {
 
     await expect(getEthUsdPrice()).resolves.toBeUndefined();
   });
+
+  it("serves the stale price when a refresh responds with an error", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ ethereum: { usd: 2500 } }),
+      }),
+    );
+    await expect(getEthUsdPrice()).resolves.toBe(2500);
+
+    vi.advanceTimersByTime(301_000);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
+
+    await expect(getEthUsdPrice()).resolves.toBe(2500);
+    vi.useRealTimers();
+  });
+
+  it("returns undefined for malformed price payloads", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ ethereum: { usd: -1 } }),
+      }),
+    );
+
+    await expect(getEthUsdPrice()).resolves.toBeUndefined();
+  });
+
+  it("hides the usd hint when no exchange rate is known", () => {
+    expect(formatEthWithUsd(1.25, undefined)).toBeUndefined();
+  });
 });

@@ -49,6 +49,38 @@ describe("InfoTip", () => {
     expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
 
+  it("dismisses on outside presses via the document listener", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <div>
+        <button type="button">Elsewhere</button>
+        <InfoTip label="About anchor">One-time staking.</InfoTip>
+      </div>,
+    );
+
+    const trigger = screen.getByRole("button", { name: "About anchor" });
+
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+
+    // A press inside the tooltip is ignored by the outside-press handler
+    // (the trigger blur still dismisses it afterwards).
+    await user.pointer({
+      keys: "[MouseLeft]",
+      target: screen.getByText("One-time staking."),
+    });
+
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+
+    await user.pointer({
+      keys: "[MouseLeft]",
+      target: screen.getByRole("button", { name: "Elsewhere" }),
+    });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+
   it("opens on click or tap and closes on outside press", async () => {
     const user = userEvent.setup();
 

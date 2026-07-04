@@ -26,9 +26,11 @@ import {
   getOffersForToken,
   getToken,
   getTokenMarket,
+  isTokenNotFoundError,
   parseMarketplaceSearchParams,
   summarizeTokenMarket,
   sortOffers,
+  TokenNotFoundError,
 } from "@/lib/marketplace/queries";
 import type { MarketOffer } from "@/lib/marketplace/types";
 import {
@@ -82,6 +84,87 @@ const baseOffers = [
     createdAt: "2026-01-02T00:00:00.000Z",
   },
 ] satisfies MarketOffer[];
+
+describe("offer scans in production", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv("NODE_ENV", "production");
+    indexMocks.getCollectionTokenIds.mockResolvedValue([]);
+    anchoringMocks.getAnchoredTokenIdSet.mockResolvedValue(undefined);
+    anchoringMocks.getAnchorStatusForTokens.mockResolvedValue(new Map());
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.useRealTimers();
+  });
+
+  const search = {
+    collection: "random-walk",
+    kind: "sell",
+    view: "discover",
+    sort: "price-asc",
+  } as const;
+
+  it("reuses the offer scan within the TTL", async () => {
+    contractMocks.fetchCollectionContractOffers.mockResolvedValue([
+      baseOffers[0],
+    ]);
+
+    const first = await getMarketplaceOffers(search);
+    const second = await getMarketplaceOffers(search);
+
+    expect(first.map((offer) => offer.id)).toEqual(["one"]);
+    expect(second.map((offer) => offer.id)).toEqual(["one"]);
+    expect(contractMocks.fetchCollectionContractOffers).toHaveBeenCalledTimes(
+      1,
+    );
+  });
+
+  it("serves the last good offers when a refresh fails", async () => {
+    vi.useFakeTimers();
+    vi.advanceTimersByTime(31_000);
+    contractMocks.fetchCollectionContractOffers.mockResolvedValueOnce([
+      baseOffers[0],
+    ]);
+
+    await getMarketplaceOffers(search);
+
+    vi.advanceTimersByTime(31_000);
+    contractMocks.fetchCollectionContractOffers.mockRejectedValueOnce(
+      new Error("scan failed"),
+    );
+
+    const stale = await getMarketplaceOffers(search);
+
+    expect(stale.map((offer) => offer.id)).toEqual(["one"]);
+    expect(contractMocks.fetchCollectionContractOffers).toHaveBeenCalledTimes(
+      2,
+    );
+  });
+
+  it("serves stale offers when a refresh exceeds the time budget", async () => {
+    vi.useFakeTimers();
+    vi.advanceTimersByTime(31_000);
+    contractMocks.fetchCollectionContractOffers.mockResolvedValueOnce([
+      { ...baseOffers[1], collectionId: "cosmic-signature" },
+    ]);
+
+    const cosmicSearch = { ...search, collection: "cosmic-signature" } as const;
+
+    await getMarketplaceOffers({ ...cosmicSearch, kind: "buy" });
+
+    vi.advanceTimersByTime(31_000);
+    contractMocks.fetchCollectionContractOffers.mockImplementationOnce(
+      () => new Promise(() => {}),
+    );
+
+    const pending = getMarketplaceOffers({ ...cosmicSearch, kind: "buy" });
+    await vi.advanceTimersByTimeAsync(6_000);
+
+    await expect(pending).resolves.toMatchObject([{ id: "two" }]);
+  });
+});
 
 describe("marketplace queries", () => {
   beforeEach(() => {
@@ -599,6 +682,54 @@ describe("marketplace queries", () => {
     expect(page.items[0]?.token.tokenId).toBe(5);
   });
 
+  it("dedupes listed tokens and applies default paging on listed views", async () => {
+    indexMocks.getCollectionTokenIds.mockResolvedValue([5]);
+    contractMocks.fetchCollectionContractOffers.mockResolvedValue([
+      {
+        id: "sell-5-low",
+        collectionId: "random-walk",
+        tokenId: 5,
+        kind: "sell",
+        priceEth: 0.5,
+        maker: "0x0000000000000000000000000000000000000001",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "sell-5-high",
+        collectionId: "random-walk",
+        tokenId: 5,
+        kind: "sell",
+        priceEth: 1,
+        maker: "0x0000000000000000000000000000000000000002",
+        createdAt: "2026-01-02T00:00:00.000Z",
+      },
+    ]);
+    contractMocks.fetchContractOffersForTokenId.mockResolvedValue([]);
+    vi.stubGlobal("fetch", routedFetchMock(randomWalkApiRoutes()));
+
+    const page = await getMarketplaceTokenPage({
+      collection: "random-walk",
+      view: "discover",
+      listedOnly: true,
+    });
+
+    expect(page).toMatchObject({ page: 1, pageSize: 12, totalItems: 1 });
+    expect(page.items.map((item) => item.token.tokenId)).toEqual([5]);
+  });
+
+  it("orders discover pages newest-first for the recent sort", async () => {
+    indexMocks.getCollectionTokenIds.mockResolvedValue([5, 7]);
+    vi.stubGlobal("fetch", routedFetchMock(randomWalkApiRoutes()));
+
+    const page = await getMarketplaceTokenPage({
+      collection: "random-walk",
+      view: "discover",
+      sort: "recent",
+    });
+
+    expect(page.items.map((item) => item.token.tokenId)).toEqual([7, 5]);
+  });
+
   it("sorts discover pages by listing price descending", async () => {
     indexMocks.getCollectionTokenIds.mockResolvedValue([5, 7]);
     contractMocks.fetchCollectionContractOffers.mockResolvedValue([
@@ -748,6 +879,229 @@ describe("marketplace queries", () => {
     expect(contractMocks.fetchCollectionContractOffers).toHaveBeenCalledTimes(
       2,
     );
+  });
+
+  it("identifies token-not-found failures with a typed error", () => {
+    const error = new TokenNotFoundError("random-walk", 999999);
+
+    expect(error.message).toBe("random-walk token 999999 was not found.");
+    expect(error.name).toBe("TokenNotFoundError");
+    expect(isTokenNotFoundError(error)).toBe(true);
+    expect(isTokenNotFoundError(new Error("other"))).toBe(false);
+  });
+
+  it("honors the legacy sell filter param", () => {
+    expect(parseMarketplaceSearchParams({ filter: "sell" })).toMatchObject({
+      kind: "sell",
+      view: "discover",
+    });
+  });
+
+  it("returns an empty page when the searched token is unminted", async () => {
+    indexMocks.getCollectionTokenIds.mockResolvedValue([5, 7]);
+
+    const page = await getMarketplaceTokenPage({
+      collection: "random-walk",
+      query: "999",
+      view: "discover",
+      page: 1,
+      pageSize: 12,
+    });
+
+    expect(page).toMatchObject({ totalItems: 0, items: [] });
+  });
+
+  it("builds discovery pages across every collection by default", async () => {
+    indexMocks.getCollectionTokenIds.mockImplementation(
+      async (collectionId: string) =>
+        collectionId === "random-walk" ? [5] : [],
+    );
+    vi.stubGlobal("fetch", routedFetchMock(randomWalkApiRoutes()));
+
+    const page = await getMarketplaceTokenPage({
+      view: "discover",
+      page: 1,
+      pageSize: 12,
+    });
+
+    expect(page.totalItems).toBe(1);
+    expect(indexMocks.getCollectionTokenIds).toHaveBeenCalledWith(
+      "random-walk",
+    );
+    expect(indexMocks.getCollectionTokenIds).toHaveBeenCalledWith(
+      "cosmic-signature",
+    );
+  });
+
+  it("unwraps repeated query params to their first value", () => {
+    const search = parseMarketplaceSearchParams({
+      collection: ["cosmic-signature", "random-walk"],
+      kind: ["buy"],
+      view: ["top-bids"],
+      sort: ["recent"],
+      anchor: ["never"],
+      query: ["  #23  "],
+      min: ["0.5"],
+      max: ["2"],
+    });
+
+    expect(search).toMatchObject({
+      collection: "cosmic-signature",
+      kind: "buy",
+      view: "top-bids",
+      sort: "recent",
+      anchor: "never",
+      query: "#23",
+      min: 0.5,
+      max: 2,
+    });
+  });
+
+  it("rejects offer lookups for unminted or fractional token ids", async () => {
+    await expect(getOffersForToken("random-walk", 1.5)).rejects.toThrow(
+      TokenNotFoundError,
+    );
+    await expect(getOffersForToken("random-walk", 999999)).rejects.toThrow(
+      "random-walk token 999999 was not found.",
+    );
+  });
+
+  it("hides inactive offers from the marketplace views", () => {
+    expect(
+      filterOffers(
+        [{ ...baseOffers[0], active: false }],
+        { collection: "all", kind: "all" },
+      ),
+    ).toEqual([]);
+  });
+
+  it("returns an empty discover page for non-numeric token searches", async () => {
+    const page = await getMarketplaceTokenPage({
+      collection: "random-walk",
+      query: "not-a-token",
+      view: "discover",
+      page: 1,
+      pageSize: 12,
+    });
+
+    expect(page).toMatchObject({ totalItems: 0, totalPages: 1, items: [] });
+  });
+
+  it("keeps every candidate when the anchor scan is unavailable", async () => {
+    indexMocks.getCollectionTokenIds.mockResolvedValue([5, 7]);
+    anchoringMocks.getAnchoredTokenIdSet.mockRejectedValue(
+      new Error("anchors down"),
+    );
+    vi.stubGlobal("fetch", routedFetchMock(randomWalkApiRoutes()));
+
+    const page = await getMarketplaceTokenPage({
+      collection: "random-walk",
+      view: "discover",
+      anchor: "never",
+      page: 1,
+      pageSize: 12,
+    });
+
+    expect(page.items.map((item) => item.token.tokenId)).toEqual([5, 7]);
+  });
+
+  it("skips tokens whose market cannot be summarized", async () => {
+    indexMocks.getCollectionTokenIds.mockResolvedValue([0, 1]);
+    // Every Cosmic Signature data source is down, so token loading throws.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("", { status: 503 })),
+    );
+
+    const page = await getMarketplaceTokenPage({
+      collection: "cosmic-signature",
+      view: "discover",
+      page: 1,
+      pageSize: 12,
+    });
+
+    expect(page.totalItems).toBe(2);
+    expect(page.items).toEqual([]);
+  });
+
+  it("exposes the Random Walk preview loader to the offer scanner", async () => {
+    contractMocks.fetchCollectionContractOffers.mockImplementationOnce(
+      async ({
+        loadToken,
+      }: {
+        loadToken?: (tokenId: number) => Promise<unknown>;
+      }) => {
+        await loadToken?.(1233);
+        return [];
+      },
+    );
+
+    await getMarketplaceOffers({
+      collection: "random-walk",
+      kind: "sell",
+      sort: "price-asc",
+    });
+
+    expect(contractMocks.fetchCollectionContractOffers).toHaveBeenCalledTimes(
+      1,
+    );
+  });
+
+  it("returns the token market without an anchor stamp when the status read fails", async () => {
+    anchoringMocks.getTokenAnchorStatus.mockRejectedValueOnce(
+      new Error("anchor read down"),
+    );
+    contractMocks.fetchContractOffersForTokenId.mockResolvedValueOnce([]);
+    vi.stubGlobal("fetch", routedFetchMock(randomWalkApiRoutes()));
+
+    const market = await getTokenMarket("random-walk", 9);
+
+    expect(market.token.tokenId).toBe(9);
+    expect(market.token.anchored).toBeUndefined();
+  });
+
+  it("serves token markets with empty offers when the contract read fails", async () => {
+    contractMocks.fetchContractOffersForTokenId.mockRejectedValueOnce(
+      new Error("contract read down"),
+    );
+    vi.stubGlobal("fetch", routedFetchMock(randomWalkApiRoutes()));
+
+    await expect(getTokenMarket("random-walk", 9)).resolves.toMatchObject({
+      token: { tokenId: 9 },
+      offers: [],
+    });
+  });
+
+  it("caches per-token offer reads in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubGlobal("fetch", routedFetchMock(randomWalkApiRoutes()));
+
+    try {
+      contractMocks.fetchContractOffersForTokenId.mockRejectedValueOnce(
+        new Error("first read failed"),
+      );
+      // A failed read must not poison the cache.
+      await expect(getOffersForToken("random-walk", 7)).rejects.toThrow(
+        "first read failed",
+      );
+
+      contractMocks.fetchContractOffersForTokenId.mockResolvedValue([
+        baseOffers[0],
+      ]);
+      await expect(getOffersForToken("random-walk", 7)).resolves.toEqual([
+        baseOffers[0],
+      ]);
+      await expect(getOffersForToken("random-walk", 7)).resolves.toEqual([
+        baseOffers[0],
+      ]);
+
+      // One failed and one successful fetch; the third call hit the cache.
+      expect(
+        contractMocks.fetchContractOffersForTokenId,
+      ).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("reads token markets, offers, and metadata fallback through query helpers", async () => {

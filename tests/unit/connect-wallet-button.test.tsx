@@ -14,6 +14,7 @@ type RainbowKitState = {
     unsupported?: boolean;
   };
   mounted: boolean;
+  authenticationStatus?: "loading" | "unauthenticated" | "authenticated";
 };
 
 const rainbowKitMock = vi.hoisted(() => ({
@@ -32,8 +33,8 @@ vi.mock("@rainbow-me/rainbowkit", () => ({
   ConnectButton: {
     Custom: ({ children }: { children: (props: unknown) => React.ReactNode }) =>
       children({
-        ...rainbowKitMock.state,
         authenticationStatus: "authenticated",
+        ...rainbowKitMock.state,
         openAccountModal: rainbowKitMock.openAccountModal,
         openChainModal: rainbowKitMock.openChainModal,
         openConnectModal: rainbowKitMock.openConnectModal,
@@ -91,14 +92,58 @@ describe("ConnectWalletButton", () => {
         displayName: "0x1234...abcd",
         displayBalance: "1.23 ETH",
       },
-      chain: { name: "Arbitrum", unsupported: false },
+      chain: {
+        name: "Arbitrum",
+        unsupported: false,
+        hasIcon: true,
+        iconUrl: "/arbitrum.svg",
+      },
     };
 
     render(<ConnectWalletButton />);
 
-    expect(screen.getByRole("button", { name: /arbitrum/i })).toBeInTheDocument();
+    const chainButton = screen.getByRole("button", { name: /arbitrum/i });
+    expect(chainButton).toBeInTheDocument();
+    expect(chainButton.querySelector("img")).toHaveAttribute(
+      "src",
+      "/arbitrum.svg",
+    );
     expect(
       screen.getByRole("button", { name: /0x1234...abcd/i }),
     ).toBeInTheDocument();
+  });
+
+  it("omits the chain icon and balance when the wallet does not provide them", () => {
+    rainbowKitMock.state = {
+      mounted: true,
+      account: { displayName: "0x1234...abcd" },
+      chain: { name: "Arbitrum", unsupported: false, hasIcon: true },
+    };
+
+    render(<ConnectWalletButton />);
+
+    const chainButton = screen.getByRole("button", { name: /arbitrum/i });
+    expect(chainButton.querySelector("img")).toBeNull();
+    expect(screen.queryByText(/eth$/i)).toBeNull();
+  });
+
+  it("renders an invisible placeholder until RainbowKit has mounted", () => {
+    rainbowKitMock.state = { mounted: false };
+
+    const { container } = render(<ConnectWalletButton />);
+
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(container.querySelector('[aria-hidden="true"]')).toHaveClass(
+      "opacity-0",
+    );
+  });
+
+  it("renders the placeholder while authentication is loading", () => {
+    rainbowKitMock.state = { mounted: true, authenticationStatus: "loading" };
+
+    const { container } = render(<ConnectWalletButton />);
+
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(container.querySelector('[aria-hidden="true"]')).not.toBeNull();
   });
 });

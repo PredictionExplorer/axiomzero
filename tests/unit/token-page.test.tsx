@@ -36,7 +36,9 @@ vi.mock("@/components/marketplace/token-actions", () => ({
   TokenActions: () => <div>Mock trading controls</div>,
 }));
 
-import TokenPage from "@/app/token/[collectionId]/[tokenId]/page";
+import TokenPage, {
+  generateMetadata,
+} from "@/app/token/[collectionId]/[tokenId]/page";
 
 function token(overrides: Partial<MarketToken> = {}): MarketToken {
   return {
@@ -278,6 +280,95 @@ describe("TokenPage", () => {
     expect(screen.queryByText(/9\.00 ETH/)).toBeNull();
   });
 
+  it("renders navigation without thumbnails when neighbor lookups fail", async () => {
+    queryMocks.getTokenMarket.mockResolvedValueOnce({
+      token: token(),
+      offers: [],
+    });
+    collectionIndexMocks.getCollectionTokenIds.mockResolvedValueOnce([
+      18, 19, 20,
+    ]);
+    queryMocks.getToken.mockRejectedValue(new Error("token API down"));
+    salesMocks.getCollectionSales.mockRejectedValueOnce(
+      new Error("sales down"),
+    );
+
+    render(
+      await TokenPage({
+        params: Promise.resolve({
+          collectionId: "cosmic-signature",
+          tokenId: "19",
+        }),
+        searchParams: Promise.resolve({}),
+      }),
+    );
+
+    expect(screen.getByRole("link", { name: /prev token/i })).toHaveAttribute(
+      "href",
+      "/token/cosmic-signature/18?theme=black&media=image&tab=market",
+    );
+    expect(screen.getByRole("link", { name: /next token/i })).toHaveAttribute(
+      "href",
+      "/token/cosmic-signature/20?theme=black&media=image&tab=market",
+    );
+  });
+
+  it("returns a 404 for token ids that are not numbers", async () => {
+    await expect(
+      TokenPage({
+        params: Promise.resolve({
+          collectionId: "cosmic-signature",
+          tokenId: "not-a-number",
+        }),
+        searchParams: Promise.resolve({}),
+      }),
+    ).rejects.toMatchObject({ digest: expect.stringContaining("404") });
+  });
+
+  it("returns a 404 for unknown collections", async () => {
+    await expect(
+      TokenPage({
+        params: Promise.resolve({
+          collectionId: "unknown-collection",
+          tokenId: "19",
+        }),
+        searchParams: Promise.resolve({}),
+      }),
+    ).rejects.toMatchObject({ digest: expect.stringContaining("404") });
+  });
+
+  it("returns a 404 when the token does not exist in the collection", async () => {
+    const missingError = new Error("missing token");
+    queryMocks.getTokenMarket.mockRejectedValueOnce(missingError);
+    queryMocks.isTokenNotFoundError.mockReturnValueOnce(true);
+
+    await expect(
+      TokenPage({
+        params: Promise.resolve({
+          collectionId: "cosmic-signature",
+          tokenId: "999999",
+        }),
+        searchParams: Promise.resolve({}),
+      }),
+    ).rejects.toMatchObject({ digest: expect.stringContaining("404") });
+  });
+
+  it("rethrows unexpected market loading failures", async () => {
+    const upstreamError = new Error("RPC exploded");
+    queryMocks.getTokenMarket.mockRejectedValueOnce(upstreamError);
+    queryMocks.isTokenNotFoundError.mockReturnValueOnce(false);
+
+    await expect(
+      TokenPage({
+        params: Promise.resolve({
+          collectionId: "cosmic-signature",
+          tokenId: "19",
+        }),
+        searchParams: Promise.resolve({}),
+      }),
+    ).rejects.toThrow("RPC exploded");
+  });
+
   it("labels tokens held by the anchoring vault", async () => {
     queryMocks.getTokenMarket.mockResolvedValueOnce({
       token: token({
@@ -300,5 +391,63 @@ describe("TokenPage", () => {
 
     expect(screen.getByText("Anchored now")).toBeVisible();
     expect(screen.getByText("Anchoring vault")).toBeVisible();
+  });
+});
+
+describe("generateMetadata", () => {
+  it("builds token metadata with artwork when the token resolves", async () => {
+    queryMocks.getToken.mockResolvedValueOnce(token());
+
+    const metadata = await generateMetadata({
+      params: Promise.resolve({
+        collectionId: "cosmic-signature",
+        tokenId: "19",
+      }),
+    });
+
+    expect(metadata.title).toBe("NUMBA 19");
+    expect(metadata.description).toContain("Cosmic Signature");
+    expect(metadata.openGraph?.images).toEqual([
+      expect.objectContaining({ url: "/cosmic.png" }),
+    ]);
+  });
+
+  it("falls back to generic token metadata for unknown collections", async () => {
+    const metadata = await generateMetadata({
+      params: Promise.resolve({
+        collectionId: "unknown-collection",
+        tokenId: "19",
+      }),
+    });
+
+    expect(metadata.title).toBe("Token");
+    expect(metadata.description).toBe("NFT detail on Axiom Zero.");
+  });
+
+  it("falls back to generic token metadata when the token lookup fails", async () => {
+    queryMocks.getToken.mockRejectedValueOnce(new Error("missing token"));
+
+    const metadata = await generateMetadata({
+      params: Promise.resolve({
+        collectionId: "cosmic-signature",
+        tokenId: "999999",
+      }),
+    });
+
+    expect(metadata.title).toBe("Token");
+  });
+
+  it("skips the token lookup for non-numeric token ids", async () => {
+    queryMocks.getToken.mockClear();
+
+    const metadata = await generateMetadata({
+      params: Promise.resolve({
+        collectionId: "cosmic-signature",
+        tokenId: "abc",
+      }),
+    });
+
+    expect(metadata.title).toBe("Token");
+    expect(queryMocks.getToken).not.toHaveBeenCalled();
   });
 });

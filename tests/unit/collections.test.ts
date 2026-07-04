@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   collections,
@@ -47,5 +47,30 @@ describe("collections config", () => {
     expect(() => requireCollection("missing" as never)).toThrow(
       "Unknown collection",
     );
+  });
+
+  describe("with malformed token range env overrides", () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    });
+
+    it("falls back to the built-in token ranges", async () => {
+      vi.stubEnv("NEXT_PUBLIC_RANDOM_WALK_MAX_TOKEN_ID", "not-a-number");
+      vi.stubEnv("NEXT_PUBLIC_COSMIC_SIGNATURE_MIN_TOKEN_ID", "also-bad");
+      vi.stubEnv("NEXT_PUBLIC_COSMIC_SIGNATURE_MAX_TOKEN_ID", "still-bad");
+      vi.resetModules();
+
+      const fresh = await import("@/config/collections");
+
+      expect(fresh.requireCollection("random-walk").tokenRange).toEqual({
+        start: 0,
+        end: 4095,
+      });
+      expect(fresh.requireCollection("cosmic-signature").tokenRange).toEqual({
+        start: 0,
+        end: 23,
+      });
+    });
   });
 });

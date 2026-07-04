@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   fetchCollectionContractOffers,
+  fetchContractOfferById,
   fetchContractOffersForTokenId,
   normalizeContractOffer,
   resetMarketplaceOfferScanCacheForTests,
@@ -73,6 +74,10 @@ function mockClient(offers: Record<number, MarketplaceOfferTuple>) {
 describe("marketplace contract live adapter", () => {
   beforeEach(() => {
     resetMarketplaceOfferScanCacheForTests();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("normalizes active sell and buy offers", () => {
@@ -288,6 +293,65 @@ describe("marketplace contract live adapter", () => {
         client: { readContract, multicall },
       }),
     ).rejects.toThrow(/offer scan failed/i);
+  });
+
+  it("keeps offers without artwork when token loading throws", async () => {
+    const client = mockClient({
+      0: offer({ tokenId: 1n }),
+      1: offer({ tokenId: 2n, seller: zero, buyer }),
+    });
+    const loadToken = vi.fn(async () => {
+      throw new Error("metadata down");
+    });
+
+    const offers = await fetchCollectionContractOffers({
+      collectionId: "cosmic-signature",
+      nftAddress: cosmicNft,
+      marketplaceAddress: marketplace,
+      loadToken,
+      client,
+    });
+
+    expect(offers.map((marketOffer) => marketOffer.tokenId)).toEqual([1, 2]);
+    expect(
+      offers.every((marketOffer) => marketOffer.artwork === undefined),
+    ).toBe(true);
+  });
+
+  it("reads a single offer by its on-chain id", async () => {
+    const readContract = vi.fn(async () => offer({ tokenId: 9n }));
+
+    await expect(
+      fetchContractOfferById({
+        collectionId: "cosmic-signature",
+        marketplaceAddress: marketplace,
+        offerId: 12,
+        client: { readContract, multicall: vi.fn() },
+      }),
+    ).resolves.toMatchObject({
+      id: "cosmic-signature-sell-12",
+      tokenId: 9,
+    });
+    expect(readContract).toHaveBeenCalledWith(
+      expect.objectContaining({ functionName: "offers", args: [12n] }),
+    );
+  });
+
+  it("constructs the default RPC client when none is provided", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("offline");
+      }),
+    );
+
+    await expect(
+      fetchContractOfferById({
+        collectionId: "cosmic-signature",
+        marketplaceAddress: marketplace,
+        offerId: 1,
+      }),
+    ).rejects.toThrow();
   });
 
   it("respects the collection scan limit", async () => {

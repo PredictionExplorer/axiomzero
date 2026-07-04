@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   fetchMarketplaceSales,
@@ -191,6 +191,26 @@ describe("fetchMarketplaceSales", () => {
     ).resolves.toEqual([]);
     expect(multicall).not.toHaveBeenCalled();
   });
+
+  it("ignores malformed ItemBought logs", async () => {
+    const { client, multicall } = fakeClient({
+      logs: [
+        { args: { seller: SELLER, buyer: BUYER }, blockNumber: 100n },
+        { args: { offerId: 2n, buyer: BUYER }, blockNumber: 100n },
+        { args: { offerId: 3n, seller: SELLER }, blockNumber: 100n },
+        {
+          args: { offerId: 4n, seller: SELLER, buyer: BUYER },
+          blockNumber: null,
+        },
+      ] as unknown as ReturnType<typeof saleLog>[],
+      offers: {},
+    });
+
+    await expect(
+      fetchMarketplaceSales({ marketplaceAddress: MARKETPLACE, client }),
+    ).resolves.toEqual([]);
+    expect(multicall).not.toHaveBeenCalled();
+  });
 });
 
 describe("getCollectionSales", () => {
@@ -220,6 +240,106 @@ describe("getCollectionSales", () => {
     await expect(
       getCollectionSales("random-walk", client),
     ).resolves.toBeUndefined();
+  });
+
+  it("constructs the default RPC client and degrades when it is offline", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("offline");
+      }),
+    );
+
+    try {
+      await expect(getCollectionSales("random-walk")).resolves.toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe("getCollectionSales production caching", () => {
+  beforeEach(() => {
+    resetSalesCachesForTests();
+    vi.stubEnv("NODE_ENV", "production");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.useRealTimers();
+  });
+
+  it("shares one marketplace scan across collections within the TTL", async () => {
+    const { client, getLogs } = fakeClient({
+      logs: [saleLog(1, 100), saleLog(2, 200)],
+      offers: {
+        1: offerTuple(RANDOM_WALK_NFT, 7, 0.5),
+        2: offerTuple(COSMIC_NFT, 3, 1.25),
+      },
+    });
+
+    const randomWalkSales = await getCollectionSales("random-walk", client);
+    const cosmicSales = await getCollectionSales("cosmic-signature", client);
+
+    expect(getLogs).toHaveBeenCalledTimes(1);
+    expect(randomWalkSales?.map((sale) => sale.tokenId)).toEqual([7]);
+    expect(cosmicSales?.map((sale) => sale.tokenId)).toEqual([3]);
+  });
+
+  it("serves the last good scan when a refresh fails", async () => {
+    vi.useFakeTimers();
+    const good = fakeClient({
+      logs: [saleLog(1, 100)],
+      offers: { 1: offerTuple(RANDOM_WALK_NFT, 7, 0.5) },
+    });
+
+    await expect(
+      getCollectionSales("random-walk", good.client),
+    ).resolves.toHaveLength(1);
+
+    vi.advanceTimersByTime(61_000);
+    const bad = fakeClient({ logs: [], offers: {}, failGetLogs: true });
+
+    const stale = await getCollectionSales("random-walk", bad.client);
+
+    expect(bad.getLogs).toHaveBeenCalledTimes(1);
+    expect(stale?.map((sale) => sale.tokenId)).toEqual([7]);
+  });
+
+  it("falls back to stale data when a refresh exceeds the time budget", async () => {
+    vi.useFakeTimers();
+    const good = fakeClient({
+      logs: [saleLog(1, 100)],
+      offers: { 1: offerTuple(RANDOM_WALK_NFT, 7, 0.5) },
+    });
+
+    await getCollectionSales("random-walk", good.client);
+    vi.advanceTimersByTime(61_000);
+
+    const hanging = {
+      getLogs: vi.fn(() => new Promise(() => {})),
+      multicall: vi.fn(),
+      getBlock: vi.fn(),
+    } as unknown as SalesClient;
+
+    const pending = getCollectionSales("random-walk", hanging);
+    await vi.advanceTimersByTimeAsync(6_000);
+
+    await expect(pending).resolves.toMatchObject([{ tokenId: 7 }]);
+  });
+
+  it("resolves undefined when the first scan hangs with nothing cached", async () => {
+    vi.useFakeTimers();
+    const hanging = {
+      getLogs: vi.fn(() => new Promise(() => {})),
+      multicall: vi.fn(),
+      getBlock: vi.fn(),
+    } as unknown as SalesClient;
+
+    const pending = getCollectionSales("random-walk", hanging);
+    await vi.advanceTimersByTimeAsync(6_000);
+
+    await expect(pending).resolves.toBeUndefined();
   });
 });
 

@@ -11,11 +11,15 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov"],
+      include: ["src/**/*.{ts,tsx}"],
+      // Ratcheted to just below the achieved coverage so it can only go up.
+      // The remaining uncovered lines are defensive wallet-state guards that
+      // sit behind disabled buttons and module-level env fallbacks.
       thresholds: {
-        statements: 80,
-        branches: 75,
-        functions: 80,
-        lines: 80,
+        statements: 98,
+        branches: 94,
+        functions: 99,
+        lines: 98,
       },
     },
   },

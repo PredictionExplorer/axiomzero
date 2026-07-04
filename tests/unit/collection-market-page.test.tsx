@@ -206,6 +206,73 @@ describe("CollectionMarketPage", () => {
     });
   });
 
+  it("renders discover token cards when the token page resolves", async () => {
+    queryMocks.getMarketplaceOffers.mockResolvedValue(collectionWideOffers);
+    queryMocks.getMarketplaceTokenPage.mockResolvedValue({
+      items: [
+        {
+          token: {
+            collectionId: "random-walk",
+            tokenId: 7,
+            name: "Random Walk #000007",
+            owner: "0x0000000000000000000000000000000000000001",
+            seed: "seed",
+            traits: [],
+            artwork: { image: "/art.png", alt: "Token artwork" },
+          },
+          offers: [],
+          activeSellOffer: offer({ id: "listing", tokenId: 7, priceEth: 1.5 }),
+          highestBid: undefined,
+        },
+      ],
+      page: 1,
+      pageSize: 12,
+      totalItems: 1,
+      totalPages: 1,
+    });
+
+    render(
+      await CollectionMarketPage({
+        collectionId: "random-walk",
+        searchParams: Promise.resolve({}),
+      }),
+    );
+
+    expect(
+      screen.getByRole("heading", { name: /#000007/i }),
+    ).toBeVisible();
+    expect(screen.getByText(/1 tokens/i)).toBeVisible();
+  });
+
+  it("degrades gracefully when every marketplace data source fails", async () => {
+    queryMocks.getMarketplaceOffers.mockRejectedValue(new Error("offers down"));
+    queryMocks.getMarketplaceTokenPage.mockRejectedValue(
+      new Error("tokens down"),
+    );
+    collectionIndexMocks.getCollectionSupply.mockRejectedValue(
+      new Error("index down"),
+    );
+    anchoringMocks.getAnchoredTokenIdSet.mockRejectedValue(
+      new Error("anchors down"),
+    );
+    ethUsdMocks.getEthUsdPrice.mockRejectedValue(new Error("pricing down"));
+    salesMocks.getCollectionSales.mockRejectedValue(new Error("sales down"));
+
+    render(
+      await CollectionMarketPage({
+        collectionId: "random-walk",
+        searchParams: Promise.resolve({ query: "1233" }),
+      }),
+    );
+
+    expect(
+      screen.getByRole("heading", { name: /^random walk$/i }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: /nothing matched this view/i }),
+    ).toBeVisible();
+  });
+
   it.each([
     ["listings", "sell"],
     ["top-bids", "buy"],

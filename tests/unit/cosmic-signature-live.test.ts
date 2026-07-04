@@ -380,4 +380,78 @@ describe("Cosmic Signature live data adapter", () => {
 
     await expect(fetchCosmicSignatureTokenIds()).resolves.toEqual([]);
   });
+
+  it("skips malformed JSON-LD blocks when scraping the app page", () => {
+    const html = [
+      '<script type="application/ld+json">{not json</script>',
+      '<script type="application/ld+json">{"@type":"BreadcrumbList"}</script>',
+      `<script type="application/ld+json">${JSON.stringify({
+        "@type": ["Product"],
+        name: "Cosmic Signature NFT #5",
+        image:
+          "https://nfts.cosmicsignature.com/images/new/cosmicsignature/0x2a345aa3f8a0419fc11cd031c98c49d171f3dd2151d9c06fd327e9254e1db962.png",
+      })}</script>`,
+    ].join("\n");
+
+    expect(tokenFromCosmicSignatureAppHtml(5, html)).toMatchObject({
+      tokenId: 5,
+      name: "Cosmic Signature NFT #5",
+    });
+  });
+
+  it("throws when the app page has no product metadata", () => {
+    expect(() =>
+      tokenFromCosmicSignatureAppHtml(5, "<html><body>empty</body></html>"),
+    ).toThrow(/app metadata was not found/i);
+  });
+
+  it("aborts hung API requests after the timeout", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_input: string | URL | Request, init?: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () =>
+              reject(new Error("aborted")),
+            );
+          }),
+      ),
+    );
+
+    try {
+      const pending = fetchCosmicSignatureTokenIds();
+      const assertion = expect(pending).rejects.toThrow("aborted");
+      await vi.advanceTimersByTimeAsync(8_000);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("aborts hung metadata requests after the timeout", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_input: string | URL | Request, init?: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () =>
+              reject(new Error("aborted")),
+            );
+          }),
+      ),
+    );
+
+    try {
+      const pending = fetchCosmicSignatureMetadata(1);
+      const assertion = expect(pending).rejects.toThrow("aborted");
+      // The metadata endpoint aborts first, then the app-page fallback.
+      await vi.advanceTimersByTimeAsync(8_000);
+      await vi.advanceTimersByTimeAsync(8_000);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 15_000);
 });

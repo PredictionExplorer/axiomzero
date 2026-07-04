@@ -51,6 +51,15 @@ function activity(overrides: Partial<HomeActivity> = {}): HomeActivity {
 }
 
 describe("MarketActivitySection", () => {
+  it("hides the latest sales rail when no recent sales resolved", () => {
+    render(
+      <MarketActivitySection activity={activity({ recentSales: [] })} />,
+    );
+
+    expect(screen.getByText("169")).toBeInTheDocument();
+    expect(screen.queryByText(/latest sales/i)).toBeNull();
+  });
+
   it("renders nothing without activity data or sales", () => {
     const { container: empty } = render(<MarketActivitySection />);
     expect(empty).toBeEmptyDOMElement();

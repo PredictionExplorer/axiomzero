@@ -79,6 +79,32 @@ describe("token detail helpers", () => {
     ).toEqual({ theme: "black", media: "image", tab: "market" });
   });
 
+  it("uses the first value of repeated query params", () => {
+    expect(
+      parseTokenDetailState({
+        theme: ["white", "black"],
+        media: ["single"],
+        tab: ["notes", "market"],
+      }),
+    ).toEqual({ theme: "white", media: "single", tab: "notes" });
+  });
+
+  it("falls back to the primary artwork when a theme image is missing", () => {
+    const model = buildTokenMediaModel(
+      "cosmic-signature",
+      token({
+        artwork: { image: "primary.png", alt: "Token artwork" },
+        assets: { blackSingleVideo: "single.mp4" },
+      }),
+      { theme: "white", media: "image", tab: "market" },
+    );
+
+    expect(model.selectedMedia).toMatchObject({
+      type: "image",
+      src: "primary.png",
+    });
+  });
+
   it("hides non-meaningful Cosmic Signature light and triple controls", () => {
     const model = buildTokenMediaModel("cosmic-signature", token(), {
       theme: "white",

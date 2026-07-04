@@ -6,6 +6,7 @@ vi.mock("@/components/marketplace/token-actions", () => ({
 }));
 
 import {
+  TokenCollectorNotesPanel,
   TokenHistoryPanel,
   TokenMarketPanel,
 } from "@/components/marketplace/token-detail-panels";
@@ -188,6 +189,56 @@ describe("token detail panels", () => {
     expect(screen.queryByText("Last sale")).toBeNull();
   });
 
+  it("lists order book rows and masks zero-address makers", () => {
+    render(
+      <TokenMarketPanel
+        collection={requireCollection("random-walk")}
+        token={token()}
+        activeSellOffer={undefined}
+        highestBid={{
+          id: "bid",
+          collectionId: "random-walk",
+          tokenId: 7,
+          kind: "buy",
+          priceEth: 0.5,
+          maker: "0x00000000000000000000000000000000000000AB",
+          createdAt: "2026-01-02T00:00:00.000Z",
+        }}
+        offers={[
+          {
+            id: "sell",
+            collectionId: "random-walk",
+            tokenId: 7,
+            kind: "sell",
+            priceEth: 2,
+            maker: "0x0000000000000000000000000000000000000000",
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+          {
+            id: "bid",
+            collectionId: "random-walk",
+            tokenId: 7,
+            kind: "buy",
+            priceEth: 0.5,
+            maker: "0x00000000000000000000000000000000000000AB",
+            createdAt: "2026-01-02T00:00:00.000Z",
+          },
+        ]}
+        usdPerEth={undefined}
+      />,
+    );
+
+    // The zero-address seller renders as Unknown instead of a broken link.
+    expect(screen.getByText("Unknown")).toBeInTheDocument();
+
+    const makerLink = screen.getByRole("link", { name: /0x0000\.\.\.00ab/i });
+    expect(makerLink).toHaveAttribute(
+      "href",
+      "https://arbiscan.io/address/0x00000000000000000000000000000000000000AB",
+    );
+    expect(screen.getByText(/top bid/i)).toBeInTheDocument();
+  });
+
   it("summarizes marketplace sales in the history header", () => {
     render(
       <TokenHistoryPanel
@@ -215,5 +266,72 @@ describe("token detail panels", () => {
     );
 
     expect(screen.queryByText(/marketplace sale/i)).toBeNull();
+  });
+
+  it("uses the singular sales label and renders unpriced records", () => {
+    render(
+      <TokenHistoryPanel
+        token={token({
+          tokenHistory: [
+            {
+              kind: "transfer",
+              recordType: 0,
+              blockNumber: 100,
+              timestamp: 1,
+              dateTime: "2026-01-01T00:00:00.000Z",
+              from: "0x0000000000000000000000000000000000000002",
+              to: "0x0000000000000000000000000000000000000003",
+            },
+          ],
+        })}
+        sales={{ count: 1, volumeEth: 0.5, lastSale: undefined, topSale: undefined }}
+      />,
+    );
+
+    expect(
+      screen.getByText(/1 marketplace sale · 0\.5000 ETH lifetime volume/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/latest event/i)).toBeInTheDocument();
+  });
+
+  it("labels vault-held tokens and hides the video share link without video", () => {
+    const collection = requireCollection("cosmic-signature");
+
+    render(
+      <TokenCollectorNotesPanel
+        collection={collection}
+        token={token({
+          collectionId: "cosmic-signature",
+          anchored: true,
+          owner: collection.anchoringWalletAddress,
+        })}
+        detailHref="https://axiomzero.market/token/cosmic-signature/7"
+        imageHref="/art.png"
+      />,
+    );
+
+    expect(screen.getByText("Anchoring vault")).toBeInTheDocument();
+    expect(screen.getByText("Anchored now")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /copy image link/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /copy video link/i })).toBeNull();
+  });
+
+  it("reports unknown anchor status when no anchor data resolved", () => {
+    render(
+      <TokenCollectorNotesPanel
+        collection={requireCollection("random-walk")}
+        token={token()}
+        detailHref="https://axiomzero.market/token/random-walk/7"
+        imageHref="/art.png"
+        videoHref="/art.mp4"
+      />,
+    );
+
+    expect(screen.getAllByText("Unknown").length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", { name: /copy video link/i }),
+    ).toBeInTheDocument();
   });
 });

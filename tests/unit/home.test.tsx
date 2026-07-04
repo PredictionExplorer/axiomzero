@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   HomeArtworkItem,
@@ -22,13 +22,17 @@ vi.mock("@/lib/marketplace/home-data", async (importOriginal) => {
   };
 });
 
+const ethUsdMocks = vi.hoisted(() => ({
+  getEthUsdPrice: vi.fn(),
+}));
+
 vi.mock("@/lib/pricing/eth-usd", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@/lib/pricing/eth-usd")>();
 
   return {
     ...actual,
-    getEthUsdPrice: vi.fn().mockResolvedValue(2000),
+    getEthUsdPrice: ethUsdMocks.getEthUsdPrice,
   };
 });
 
@@ -54,6 +58,32 @@ function pulse(
 }
 
 describe("Home", () => {
+  beforeEach(() => {
+    ethUsdMocks.getEthUsdPrice.mockResolvedValue(2000);
+  });
+
+  it("renders without usd hints when the exchange rate lookup fails", async () => {
+    ethUsdMocks.getEthUsdPrice.mockRejectedValue(new Error("pricing down"));
+    homeDataMocks.getHomeHeroArtworks.mockResolvedValue([]);
+    homeDataMocks.getHomeMarketOverview.mockResolvedValue({
+      pulses: [
+        pulse({ collectionId: "random-walk", shortName: "Random Walk" }),
+        pulse({
+          collectionId: "cosmic-signature",
+          shortName: "Cosmic Signature",
+        }),
+      ],
+      featured: [],
+    });
+
+    render(await Home());
+
+    expect(
+      screen.getByRole("link", { name: /^my nfts$/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/≈ \$/)).toBeNull();
+  });
+
   it("links to the three main destinations and token-specific market stats", async () => {
     const randomWalkPulse = pulse({
       collectionId: "random-walk",

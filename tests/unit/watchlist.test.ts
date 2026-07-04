@@ -32,6 +32,27 @@ describe("watchlist storage", () => {
     ]);
   });
 
+  it("drops entries that are not objects and payloads that are not arrays", () => {
+    window.localStorage.setItem(
+      WATCHLIST_STORAGE_KEY,
+      JSON.stringify([
+        null,
+        "starred",
+        42,
+        { collectionId: "random-walk", tokenId: 7, addedAt: "2026-01-01" },
+      ]),
+    );
+    expect(readWatchlist()).toEqual([
+      { collectionId: "random-walk", tokenId: 7, addedAt: "2026-01-01" },
+    ]);
+
+    window.localStorage.setItem(
+      WATCHLIST_STORAGE_KEY,
+      JSON.stringify({ collectionId: "random-walk" }),
+    );
+    expect(readWatchlist()).toEqual([]);
+  });
+
   it("toggles tokens on and off with newest first", () => {
     expect(toggleWatch("random-walk", 7)).toBe(true);
     expect(toggleWatch("cosmic-signature", 3)).toBe(true);

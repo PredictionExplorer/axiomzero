@@ -15,6 +15,15 @@ describe("marketplace route helpers", () => {
     expect(tokenPath("random-walk", 7)).toBe("/token/random-walk/7");
   });
 
+  it("defaults to the discover view when no view is requested", () => {
+    expect(
+      collectionMarketHref({
+        collectionId: "random-walk",
+        search: {},
+      }),
+    ).toBe("/random-walk?view=discover");
+  });
+
   it("builds collection-scoped market links", () => {
     expect(
       collectionMarketHref({

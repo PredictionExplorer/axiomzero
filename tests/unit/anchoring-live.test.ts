@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const indexMocks = vi.hoisted(() => ({
   getCollectionTokenIds: vi.fn(),
@@ -96,6 +96,15 @@ describe("anchoring live reads", () => {
     expect(multicall).not.toHaveBeenCalled();
   });
 
+  it("returns an empty status map for empty token lists without any reads", async () => {
+    const { client, multicall } = clientReturning(() => 0n);
+
+    await expect(
+      fetchAnchorStatusForTokens({ refs: [], client }),
+    ).resolves.toEqual(new Map());
+    expect(multicall).not.toHaveBeenCalled();
+  });
+
   it("resolves anchor status per token and omits failed reads", async () => {
     const { client, multicall } = clientReturning((call) => {
       if (call.args?.[0] === 5n) {
@@ -164,5 +173,142 @@ describe("anchoring live reads", () => {
     await expect(
       getAnchoredTokenIdSet("random-walk", healthyClient),
     ).resolves.toEqual(new Set([0]));
+  });
+});
+
+describe("anchoring production caches", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetAnchoringCachesForTests();
+    indexMocks.getCollectionTokenIds.mockResolvedValue([0, 1, 2, 3]);
+    vi.stubEnv("NODE_ENV", "production");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.useRealTimers();
+  });
+
+  it("reuses the collection scan within the TTL", async () => {
+    const { client, multicall } = clientReturning((call) =>
+      call.args?.[0] === 1n ? 1n : 0n,
+    );
+
+    await expect(
+      getAnchoredTokenIdSet("random-walk", client),
+    ).resolves.toEqual(new Set([1]));
+    await expect(
+      getAnchoredTokenIdSet("random-walk", client),
+    ).resolves.toEqual(new Set([1]));
+
+    expect(multicall).toHaveBeenCalledTimes(1);
+  });
+
+  it("serves the last good anchor scan when a refresh fails", async () => {
+    vi.useFakeTimers();
+    const { client: healthy } = clientReturning((call) =>
+      call.args?.[0] === 1n ? 1n : 0n,
+    );
+
+    await getAnchoredTokenIdSet("random-walk", healthy);
+    vi.advanceTimersByTime(5 * 60_000 + 1_000);
+
+    const { client: failing } = clientReturning(() => new Error("rpc down"));
+
+    await expect(
+      getAnchoredTokenIdSet("random-walk", failing),
+    ).resolves.toEqual(new Set([1]));
+  });
+
+  it("falls back to stale anchors when a refresh exceeds the time budget", async () => {
+    vi.useFakeTimers();
+    const { client: healthy } = clientReturning((call) =>
+      call.args?.[0] === 1n ? 1n : 0n,
+    );
+
+    await getAnchoredTokenIdSet("random-walk", healthy);
+    vi.advanceTimersByTime(5 * 60_000 + 1_000);
+
+    const hanging = {
+      multicall: vi.fn(() => new Promise(() => {})),
+    } as unknown as AnchoringClient;
+
+    const pending = getAnchoredTokenIdSet("random-walk", hanging);
+    await vi.advanceTimersByTimeAsync(6_000);
+
+    await expect(pending).resolves.toEqual(new Set([1]));
+  });
+
+  it("answers token statuses from a completed collection scan without new reads", async () => {
+    const { client, multicall } = clientReturning((call) =>
+      call.args?.[0] === 2n ? 1n : 0n,
+    );
+
+    await getAnchoredTokenIdSet("random-walk", client);
+    expect(multicall).toHaveBeenCalledTimes(1);
+
+    const statuses = await getAnchorStatusForTokens(
+      [
+        { collectionId: "random-walk", tokenId: 2 },
+        { collectionId: "random-walk", tokenId: 3 },
+      ],
+      client,
+    );
+
+    expect(multicall).toHaveBeenCalledTimes(1);
+    expect(statuses.get(anchorStatusKey("random-walk", 2))).toBe(true);
+    expect(statuses.get(anchorStatusKey("random-walk", 3))).toBe(false);
+  });
+
+  it("caches per-token statuses between batched lookups", async () => {
+    const { client, multicall } = clientReturning((call) =>
+      call.args?.[0] === 5n ? 1n : 0n,
+    );
+
+    const first = await getAnchorStatusForTokens(
+      [{ collectionId: "random-walk", tokenId: 5 }],
+      client,
+    );
+    const second = await getAnchorStatusForTokens(
+      [{ collectionId: "random-walk", tokenId: 5 }],
+      client,
+    );
+
+    expect(multicall).toHaveBeenCalledTimes(1);
+    expect(first.get(anchorStatusKey("random-walk", 5))).toBe(true);
+    expect(second.get(anchorStatusKey("random-walk", 5))).toBe(true);
+  });
+
+  it("treats batch failures as unknown statuses", async () => {
+    const failing = {
+      multicall: vi.fn(async () => {
+        throw new Error("rpc down");
+      }),
+    } as unknown as AnchoringClient;
+
+    const statuses = await getAnchorStatusForTokens(
+      [{ collectionId: "random-walk", tokenId: 9 }],
+      failing,
+    );
+
+    expect(statuses.size).toBe(0);
+  });
+
+  it("constructs the default RPC client and degrades when it is offline", async () => {
+    vi.unstubAllEnvs();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("offline");
+      }),
+    );
+
+    try {
+      await expect(
+        getAnchoredTokenIdSet("random-walk"),
+      ).resolves.toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

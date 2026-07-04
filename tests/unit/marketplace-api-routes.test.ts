@@ -73,6 +73,21 @@ describe("marketplace API routes", () => {
     expect(payload.offers[0]).toMatchObject({ id: "buy-1", kind: "buy" });
   });
 
+  it("collects repeated query params into arrays", async () => {
+    queryMocks.getMarketplaceOffers.mockResolvedValueOnce([]);
+
+    await getOffers(
+      new NextRequest(
+        "http://localhost/api/marketplace/offers?kind=buy&kind=sell&kind=all&sort=recent",
+      ),
+    );
+
+    expect(queryMocks.parseMarketplaceSearchParams).toHaveBeenCalledWith({
+      kind: ["buy", "sell", "all"],
+      sort: "recent",
+    });
+  });
+
   it("returns a bad gateway response when source loading fails", async () => {
     queryMocks.getMarketplaceOffers.mockRejectedValueOnce(
       new Error("backend unavailable"),
@@ -122,6 +137,42 @@ describe("marketplace API routes", () => {
     );
 
     expect(response.status).toBe(404);
+  });
+
+  it("returns not found for non-numeric token ids", async () => {
+    const response = await getTokenMarketRoute(
+      new NextRequest(
+        "http://localhost/api/marketplace/token/random-walk/abc",
+      ),
+      {
+        params: Promise.resolve({
+          collectionId: "random-walk",
+          tokenId: "abc",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(404);
+    expect(queryMocks.getTokenMarket).not.toHaveBeenCalled();
+  });
+
+  it("returns a bad gateway response for unexpected token market failures", async () => {
+    queryMocks.getTokenMarket.mockRejectedValueOnce(new Error("RPC exploded"));
+
+    const response = await getTokenMarketRoute(
+      new NextRequest("http://localhost/api/marketplace/token/random-walk/9"),
+      {
+        params: Promise.resolve({
+          collectionId: "random-walk",
+          tokenId: "9",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "RPC exploded",
+    });
   });
 
   it("returns not found when a known collection token is unminted", async () => {

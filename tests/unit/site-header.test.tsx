@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/components/wallet/connect-wallet-button", () => ({
@@ -39,5 +39,45 @@ describe("SiteHeader", () => {
     expect(
       screen.queryByRole("link", { name: /browse market/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("toggles the mobile menu and locks body scroll while it is open", () => {
+    const { unmount } = render(<SiteHeader />);
+
+    const toggle = screen.getByRole("button", { name: /open navigation/i });
+    expect(document.body.style.overflow).toBe("");
+
+    fireEvent.click(toggle);
+
+    expect(
+      screen.getByRole("button", { name: /close navigation/i }),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(document.body.style.overflow).toBe("hidden");
+
+    fireEvent.click(screen.getByRole("button", { name: /close navigation/i }));
+
+    expect(
+      screen.getByRole("button", { name: /open navigation/i }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(document.body.style.overflow).toBe("");
+
+    unmount();
+  });
+
+  it("closes the mobile menu when a navigation link is chosen", () => {
+    render(<SiteHeader />);
+
+    fireEvent.click(screen.getByRole("button", { name: /open navigation/i }));
+
+    const mobileNav = document.getElementById("mobile-nav");
+    const mobileFaqLink = mobileNav?.querySelector('a[href="/faq"]');
+    expect(mobileFaqLink).not.toBeNull();
+
+    fireEvent.click(mobileFaqLink!);
+
+    expect(
+      screen.getByRole("button", { name: /open navigation/i }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(document.body.style.overflow).toBe("");
   });
 });

@@ -199,6 +199,66 @@ describe("home data", () => {
     expect(overview.activity?.recentSales[0]?.artwork?.image).toContain("9");
   });
 
+  it("fetches Cosmic Signature artwork for recent sales and tolerates failures", async () => {
+    queryMocks.getMarketplaceOffers.mockResolvedValue([]);
+    indexMocks.getCollectionSupply.mockResolvedValue(24);
+    salesMocks.getCollectionSales.mockImplementation(
+      async (collectionId: string) =>
+        collectionId === "cosmic-signature"
+          ? [
+              sale({
+                collectionId: "cosmic-signature",
+                tokenId: 1,
+                offerId: 4,
+                priceEth: 1,
+                blockNumber: 400,
+              }),
+              sale({
+                collectionId: "cosmic-signature",
+                tokenId: 2,
+                offerId: 5,
+                priceEth: 0.5,
+                blockNumber: 300,
+              }),
+            ]
+          : undefined,
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+
+        if (url.endsWith("/metadata/1")) {
+          return new Response(
+            JSON.stringify({
+              image: "https://nfts.cosmicsignature.com/cosmic-1.png",
+              name: "NUMBA 1",
+              properties: {
+                owner: "0x0000000000000000000000000000000000000001",
+                seed: "seed",
+                token_id: 1,
+              },
+            }),
+          );
+        }
+
+        return new Response("", { status: 503 });
+      }),
+    );
+
+    try {
+      const overview = await getHomeMarketOverview(8, 4);
+
+      expect(overview.activity?.recentSales).toHaveLength(2);
+      expect(overview.activity?.recentSales[0]?.artwork?.image).toContain(
+        "cosmic-1.png",
+      );
+      expect(overview.activity?.recentSales[1]?.artwork).toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("loads hero artworks and skips failed tokens", async () => {
     queryMocks.getToken.mockImplementation(
       async (collectionId: string, tokenId: number) => {
