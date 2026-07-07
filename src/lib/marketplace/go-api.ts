@@ -41,6 +41,13 @@ function envelopeOf(payload: unknown) {
 type FetchGoApiJsonOptions = {
   revalidate?: number;
   timeoutMs?: number;
+  /**
+   * Bypass Next's data cache with `cache: "no-store"`. Required for responses
+   * that exceed Next's 2MB cache limit (e.g. the full minted-token list), which
+   * would otherwise fail the cache write and re-download on every render.
+   * Callers should provide their own in-memory cache when using this.
+   */
+  noStore?: boolean;
 };
 
 export async function fetchGoApiJson<Schema extends z.ZodType>(
@@ -49,6 +56,7 @@ export async function fetchGoApiJson<Schema extends z.ZodType>(
   {
     revalidate = DEFAULT_REVALIDATE_SECONDS,
     timeoutMs = DEFAULT_TIMEOUT_MS,
+    noStore = false,
   }: FetchGoApiJsonOptions = {},
 ): Promise<z.infer<Schema>> {
   const controller = new AbortController();
@@ -59,7 +67,7 @@ export async function fetchGoApiJson<Schema extends z.ZodType>(
     response = await fetch(url, {
       headers: { Accept: "application/json" },
       signal: controller.signal,
-      next: { revalidate },
+      ...(noStore ? { cache: "no-store" } : { next: { revalidate } }),
     });
   } finally {
     clearTimeout(timeout);

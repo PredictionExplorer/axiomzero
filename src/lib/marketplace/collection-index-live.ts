@@ -4,6 +4,7 @@ import { arbitrum } from "viem/chains";
 
 import { requireCollection } from "@/config/collections";
 import { fetchCosmicSignatureTokenIds } from "@/lib/marketplace/cosmic-signature-live";
+import { fetchRandomWalkTokenIds } from "@/lib/marketplace/random-walk-market-live";
 import { coerceAddress } from "@/lib/marketplace/eth";
 import type { Collection, CollectionId } from "@/lib/marketplace/types";
 import { erc721Abi } from "@/lib/web3/abis";
@@ -120,11 +121,25 @@ export async function fetchCollectionTokenIds({
 }: FetchCollectionTokenIdsOptions) {
   const collection = requireCollection(collectionId);
 
-  // The Cosmic Signature Go API serves the minted token list directly, which
-  // avoids a totalSupply + tokenByIndex multicall against a public RPC.
+  // Both Go backends serve the minted token list directly, which avoids a
+  // totalSupply + tokenByIndex multicall against a public RPC.
   if (collectionId === "cosmic-signature") {
     try {
       const tokenIds = await fetchCosmicSignatureTokenIds();
+
+      if (tokenIds.length) {
+        return tokenIds;
+      }
+    } catch {
+      // Fall through to the on-chain index.
+    }
+  }
+
+  // The Random Walk backend serves the minted list too, but only outside test
+  // so the on-chain enumeration path stays unit-tested.
+  if (collectionId === "random-walk" && process.env.NODE_ENV !== "test") {
+    try {
+      const tokenIds = await fetchRandomWalkTokenIds();
 
       if (tokenIds.length) {
         return tokenIds;
@@ -150,6 +165,18 @@ export async function fetchCollectionSupply({
   if (collectionId === "cosmic-signature") {
     try {
       const tokenIds = await fetchCosmicSignatureTokenIds();
+
+      if (tokenIds.length) {
+        return tokenIds.length;
+      }
+    } catch {
+      // Fall through to the on-chain read.
+    }
+  }
+
+  if (collectionId === "random-walk" && process.env.NODE_ENV !== "test") {
+    try {
+      const tokenIds = await fetchRandomWalkTokenIds();
 
       if (tokenIds.length) {
         return tokenIds.length;

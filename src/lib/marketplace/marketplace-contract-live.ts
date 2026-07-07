@@ -13,6 +13,19 @@ import type {
   OfferKind,
   TokenArtwork,
 } from "@/lib/marketplace/types";
+import { fetchRandomWalkOffers } from "@/lib/marketplace/random-walk-market-live";
+import { logMarketplaceDegradation } from "@/lib/marketplace/log";
+
+/**
+ * Random Walk trades on the same Arbitrum marketplace contract indexed by the
+ * Go backend, so its offers can be read from the backend instead of a
+ * multicall RPC scan. The preference is skipped under test so the on-chain
+ * paths stay unit-tested; production and development use the backend and fall
+ * back to RPC when it is unavailable.
+ */
+function shouldUseRandomWalkBackend(collectionId: CollectionId) {
+  return collectionId === "random-walk" && process.env.NODE_ENV !== "test";
+}
 
 const ZERO_ADDRESS =
   "0x0000000000000000000000000000000000000000" as `0x${string}`;
@@ -176,6 +189,19 @@ export async function fetchContractOffersForTokenId({
   artwork,
   client = createMarketplacePublicClient(),
 }: FetchOffersOptions & { tokenId: number }) {
+  if (shouldUseRandomWalkBackend(collectionId)) {
+    try {
+      const offers = await fetchRandomWalkOffers();
+
+      return offers.filter((offer) => offer.tokenId === tokenId);
+    } catch (error) {
+      logMarketplaceDegradation(
+        `random-walk token ${tokenId} offers via backend unavailable, falling back to RPC`,
+        error,
+      );
+    }
+  }
+
   const [sellOfferIds, buyOfferIds] = (await Promise.all([
     client.readContract({
       address: marketplaceAddress,
@@ -309,6 +335,17 @@ export async function fetchCollectionContractOffers({
     DEFAULT_MARKETPLACE_SCAN_LIMIT,
   client = createMarketplacePublicClient(),
 }: FetchCollectionOffersOptions) {
+  if (shouldUseRandomWalkBackend(collectionId)) {
+    try {
+      return await fetchRandomWalkOffers();
+    } catch (error) {
+      logMarketplaceDegradation(
+        "random-walk offers via backend unavailable, falling back to RPC",
+        error,
+      );
+    }
+  }
+
   const offers = await getMarketplaceOfferTuples({
     marketplaceAddress,
     maxOffers,

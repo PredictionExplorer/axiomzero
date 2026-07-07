@@ -93,7 +93,7 @@ function formatRandomWalkName(tokenId: number) {
   return `Random Walk #${String(tokenId).padStart(6, "0")}`;
 }
 
-function randomWalkApiPath(path: string) {
+export function randomWalkApiPath(path: string) {
   return `${RANDOM_WALK_API_URL}/api/randomwalk/${path}`;
 }
 

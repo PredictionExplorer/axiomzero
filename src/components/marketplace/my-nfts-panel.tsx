@@ -38,6 +38,9 @@ const OWNED_TOKEN_API_PAGE_SIZE = 1_000;
 const COSMIC_SIGNATURE_API_URL =
   process.env.NEXT_PUBLIC_COSMIC_SIGNATURE_API_URL ??
   "https://nfts.cosmicsignature.com";
+const RANDOM_WALK_API_URL =
+  process.env.NEXT_PUBLIC_RANDOM_WALK_API_URL ??
+  "https://api.randomwalknft.com:1443";
 
 type CollectionScanConfig = Pick<
   Collection,
@@ -148,6 +151,40 @@ async function readCosmicSignatureOwnedTokenIds(owner: `0x${string}`) {
 
   if (payload.status !== 1) {
     throw new Error("Cosmic Signature owned-token lookup failed.");
+  }
+
+  const tokenIds = (payload.UserTokens ?? [])
+    .map((token) => token.TokenId)
+    .filter(
+      (tokenId): tokenId is number =>
+        typeof tokenId === "number" && Number.isSafeInteger(tokenId),
+    );
+
+  return [...new Set(tokenIds)].sort((left, right) => left - right);
+}
+
+/**
+ * Owned Random Walk tokens from the collection's Go API. The `tokens/by_user`
+ * JSON handler accepts a raw 0x address, so this spares the wallet RPC a
+ * balanceOf + enumeration multicall.
+ */
+async function readRandomWalkOwnedTokenIds(owner: `0x${string}`) {
+  const response = await fetch(
+    `${RANDOM_WALK_API_URL}/api/randomwalk/tokens/by_user/${owner}`,
+    { headers: { Accept: "application/json" } },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Random Walk owned-token lookup returned ${response.status}.`);
+  }
+
+  const payload = (await response.json()) as {
+    status?: number;
+    UserTokens?: Array<{ TokenId?: unknown }> | null;
+  };
+
+  if (payload.status !== 1) {
+    throw new Error("Random Walk owned-token lookup failed.");
   }
 
   const tokenIds = (payload.UserTokens ?? [])
@@ -320,6 +357,14 @@ async function resolveOwnedTokenIds({
   if (collection.id === "cosmic-signature") {
     try {
       return await readCosmicSignatureOwnedTokenIds(owner);
+    } catch {
+      // Fall through to on-chain reads when the collection API is down.
+    }
+  }
+
+  if (collection.id === "random-walk") {
+    try {
+      return await readRandomWalkOwnedTokenIds(owner);
     } catch {
       // Fall through to on-chain reads when the collection API is down.
     }

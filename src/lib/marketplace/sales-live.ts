@@ -8,6 +8,8 @@ import type {
   SalesSummary,
 } from "@/lib/marketplace/types";
 import { itemBoughtEvent, marketplaceAbi } from "@/lib/web3/abis";
+import { fetchRandomWalkSales } from "@/lib/marketplace/random-walk-market-live";
+import { logMarketplaceDegradation } from "@/lib/marketplace/log";
 
 /**
  * Completed sales are reconstructed from the marketplace contract's
@@ -257,6 +259,21 @@ export async function getCollectionSales(
   collectionId: CollectionId,
   client?: SalesClient,
 ): Promise<MarketSale[] | undefined> {
+  // Random Walk sales come from the Go backend (same marketplace contract),
+  // which replaces the ItemBought log scan + offer multicall. An injected
+  // client is the test/DI seam for the on-chain path, so the backend is only
+  // preferred when no client is supplied; it falls back to the RPC snapshot.
+  if (collectionId === "random-walk" && !client) {
+    try {
+      return await fetchRandomWalkSales();
+    } catch (error) {
+      logMarketplaceDegradation(
+        "random-walk sales via backend unavailable, falling back to RPC",
+        error,
+      );
+    }
+  }
+
   const collection = requireCollection(collectionId);
   const sales = await getMarketplaceSalesSnapshot(
     collection.marketplaceAddress,
