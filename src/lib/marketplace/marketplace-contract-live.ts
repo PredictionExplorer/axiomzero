@@ -14,17 +14,21 @@ import type {
   TokenArtwork,
 } from "@/lib/marketplace/types";
 import { fetchRandomWalkOffers } from "@/lib/marketplace/random-walk-market-live";
+import { fetchCosmicSignatureOffers } from "@/lib/marketplace/cosmic-signature-market-live";
 import { logMarketplaceDegradation } from "@/lib/marketplace/log";
 
 /**
- * Random Walk trades on the same Arbitrum marketplace contract indexed by the
- * Go backend, so its offers can be read from the backend instead of a
+ * Both collections trade on the same Arbitrum marketplace contract indexed by
+ * the Go backends, so their offers can be read from the backend instead of a
  * multicall RPC scan. The preference is skipped under test so the on-chain
  * paths stay unit-tested; production and development use the backend and fall
  * back to RPC when it is unavailable.
  */
-function shouldUseRandomWalkBackend(collectionId: CollectionId) {
-  return collectionId === "random-walk" && process.env.NODE_ENV !== "test";
+function shouldUseCollectionBackend(
+  collectionId: CollectionId,
+  target: CollectionId,
+) {
+  return collectionId === target && process.env.NODE_ENV !== "test";
 }
 
 const ZERO_ADDRESS =
@@ -189,7 +193,7 @@ export async function fetchContractOffersForTokenId({
   artwork,
   client = createMarketplacePublicClient(),
 }: FetchOffersOptions & { tokenId: number }) {
-  if (shouldUseRandomWalkBackend(collectionId)) {
+  if (shouldUseCollectionBackend(collectionId, "random-walk")) {
     try {
       const offers = await fetchRandomWalkOffers();
 
@@ -197,6 +201,22 @@ export async function fetchContractOffersForTokenId({
     } catch (error) {
       logMarketplaceDegradation(
         `random-walk token ${tokenId} offers via backend unavailable, falling back to RPC`,
+        error,
+      );
+    }
+  }
+
+  if (shouldUseCollectionBackend(collectionId, "cosmic-signature")) {
+    try {
+      const offers = await fetchCosmicSignatureOffers();
+
+      // Offers carry only a token id; attach the token's artwork (seed-derived).
+      return offers
+        .filter((offer) => offer.tokenId === tokenId)
+        .map((offer) => ({ ...offer, artwork: artwork ?? offer.artwork }));
+    } catch (error) {
+      logMarketplaceDegradation(
+        `cosmic-signature token ${tokenId} offers via backend unavailable, falling back to RPC`,
         error,
       );
     }
@@ -335,12 +355,34 @@ export async function fetchCollectionContractOffers({
     DEFAULT_MARKETPLACE_SCAN_LIMIT,
   client = createMarketplacePublicClient(),
 }: FetchCollectionOffersOptions) {
-  if (shouldUseRandomWalkBackend(collectionId)) {
+  if (shouldUseCollectionBackend(collectionId, "random-walk")) {
     try {
       return await fetchRandomWalkOffers();
     } catch (error) {
       logMarketplaceDegradation(
         "random-walk offers via backend unavailable, falling back to RPC",
+        error,
+      );
+    }
+  }
+
+  if (shouldUseCollectionBackend(collectionId, "cosmic-signature")) {
+    try {
+      const backendOffers = await fetchCosmicSignatureOffers();
+      // Cosmic Signature offers carry only a token id, so artwork (seed-derived)
+      // is resolved per token via loadToken, matching the on-chain scan path.
+      const tokenIds = [
+        ...new Set(backendOffers.map((offer) => offer.tokenId)),
+      ];
+      const artwork = await artworkByTokenId(tokenIds, loadToken);
+
+      return backendOffers.map((offer) => ({
+        ...offer,
+        artwork: artwork.get(offer.tokenId) ?? offer.artwork,
+      }));
+    } catch (error) {
+      logMarketplaceDegradation(
+        "cosmic-signature offers via backend unavailable, falling back to RPC",
         error,
       );
     }

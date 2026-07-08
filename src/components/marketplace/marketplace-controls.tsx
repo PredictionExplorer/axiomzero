@@ -1,6 +1,7 @@
 import type {
   CollectionId,
   MarketplaceSearchParams,
+  MarketplaceView,
 } from "@/lib/marketplace/types";
 import {
   collectionMarketHref,
@@ -8,7 +9,13 @@ import {
 } from "@/lib/marketplace/routes";
 import { GlossaryTip } from "@/components/ui/tooltip";
 
-const views = [
+const views: ReadonlyArray<{
+  id: MarketplaceView;
+  label: string;
+  description: string;
+  /** Short hover hint clarifying the offer side the view shows. */
+  hint?: string;
+}> = [
   {
     id: "discover",
     label: "Discover",
@@ -18,13 +25,15 @@ const views = [
     id: "listings",
     label: "Listings",
     description: "NFTs you can buy right now, cheapest first",
+    hint: "Sell Offers",
   },
   {
     id: "top-bids",
     label: "Top bids",
     description: "Standing buy offers, highest first",
+    hint: "Buy Offers",
   },
-] as const;
+];
 
 export function MarketplaceControls({
   collectionId,
@@ -69,7 +78,7 @@ export function MarketplaceControls({
           <a
             key={view.id}
             href={collectionMarketHref({ collectionId, search, view: view.id })}
-            className={`rounded-2xl border p-4 transition ${
+            className={`group relative rounded-2xl border p-4 transition ${
               activeView === view.id
                 ? "border-copper/50 bg-copper/12 text-ivory"
                 : "border-ivory/10 bg-ink/45 text-bone hover:border-ivory/20 hover:bg-ivory/[0.06]"
@@ -79,6 +88,14 @@ export function MarketplaceControls({
             <span className="mt-1 block text-xs leading-5 text-bone/72">
               {view.description}
             </span>
+            {view.hint ? (
+              <span
+                role="tooltip"
+                className="pointer-events-none absolute -top-2 left-1/2 z-30 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-lg border border-ivory/15 bg-carbon px-2.5 py-1 text-xs font-semibold normal-case tracking-normal text-ivory opacity-0 shadow-[0_12px_30px_rgba(0,0,0,0.5)] transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
+              >
+                {view.hint}
+              </span>
+            ) : null}
           </a>
         ))}
       </div>

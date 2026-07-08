@@ -135,7 +135,7 @@ function normalizeSeed(value: string | number | undefined) {
   return String(value).replace(/^0x/i, "");
 }
 
-function cosmicSignatureApiPath(path: string) {
+export function cosmicSignatureApiPath(path: string) {
   return `${COSMIC_SIGNATURE_API_URL}/api/cosmicgame/${path}`;
 }
 

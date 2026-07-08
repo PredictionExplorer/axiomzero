@@ -9,6 +9,7 @@ import type {
 } from "@/lib/marketplace/types";
 import { itemBoughtEvent, marketplaceAbi } from "@/lib/web3/abis";
 import { fetchRandomWalkSales } from "@/lib/marketplace/random-walk-market-live";
+import { fetchCosmicSignatureSales } from "@/lib/marketplace/cosmic-signature-market-live";
 import { logMarketplaceDegradation } from "@/lib/marketplace/log";
 
 /**
@@ -269,6 +270,17 @@ export async function getCollectionSales(
     } catch (error) {
       logMarketplaceDegradation(
         "random-walk sales via backend unavailable, falling back to RPC",
+        error,
+      );
+    }
+  }
+
+  if (collectionId === "cosmic-signature" && !client) {
+    try {
+      return await fetchCosmicSignatureSales();
+    } catch (error) {
+      logMarketplaceDegradation(
+        "cosmic-signature sales via backend unavailable, falling back to RPC",
         error,
       );
     }
