@@ -1,5 +1,7 @@
-import { createPublicClient, formatEther, http } from "viem";
+import { createPublicClient, formatEther } from "viem";
 import { arbitrum } from "viem/chains";
+
+import { getArbitrumRpcTransport } from "@/lib/web3/arbitrum-transport";
 
 import { collections, requireCollection } from "@/config/collections";
 import type {
@@ -71,14 +73,14 @@ type OfferTuple = readonly [
 function createSalesPublicClient(): SalesClient {
   return createPublicClient({
     chain: arbitrum,
-    transport: http(
-      process.env.ARBITRUM_RPC_URL ??
-        process.env.NEXT_PUBLIC_ARBITRUM_RPC_URL ??
-        "https://arb1.arbitrum.io/rpc",
-      // Timestamp lookups batch into few HTTP round trips; sales data
-      // degrades to "unavailable" when the public RPC is slow.
-      { batch: true, timeout: 5_000, retryCount: 1 },
-    ),
+    // Timestamp lookups batch into few HTTP round trips; sales data
+    // degrades to "unavailable" when the public RPC is slow. The transport
+    // rotates hourly between the configured RPC servers with failover.
+    transport: getArbitrumRpcTransport({
+      batch: true,
+      timeout: 5_000,
+      retryCount: 1,
+    }),
   }) as unknown as SalesClient;
 }
 

@@ -13,17 +13,10 @@ import {
 } from "@/lib/marketplace/eth";
 import { fetchGoApiJson } from "@/lib/marketplace/go-api";
 import { logMarketplaceDegradation } from "@/lib/marketplace/log";
+import { getCosmicSignatureApiBase } from "@/lib/server-rotation";
 
 const COSMIC_SIGNATURE_NFT_API_URL = "https://nfts.cosmicsignature.com";
 const COSMIC_SIGNATURE_APP_URL = "https://app.cosmicsignature.com";
-/**
- * Cosmic Signature runs the same Go "webserv" backend as Random Walk; its
- * JSON API lives under /api/cosmicgame on the NFT host.
- */
-const COSMIC_SIGNATURE_API_URL =
-  process.env.COSMIC_SIGNATURE_API_URL ??
-  process.env.NEXT_PUBLIC_COSMIC_SIGNATURE_API_URL ??
-  COSMIC_SIGNATURE_NFT_API_URL;
 const COSMIC_SIGNATURE_REFRESH_SECONDS = 60;
 const COSMIC_SIGNATURE_TIMEOUT_MS = 8_000;
 const COSMIC_SIGNATURE_HISTORY_PAGE_SIZE = 1_000;
@@ -135,8 +128,14 @@ function normalizeSeed(value: string | number | undefined) {
   return String(value).replace(/^0x/i, "");
 }
 
+/**
+ * Cosmic Signature runs the same Go "webserv" backend as Random Walk; its
+ * JSON API lives under /api/cosmicgame. The host comes from the hourly server
+ * rotation (`server-rotation.ts`) with retry-once failover in the shared
+ * Go API client.
+ */
 export function cosmicSignatureApiPath(path: string) {
-  return `${COSMIC_SIGNATURE_API_URL}/api/cosmicgame/${path}`;
+  return `${getCosmicSignatureApiBase()}/api/cosmicgame/${path}`;
 }
 
 async function fetchWithTimeout(

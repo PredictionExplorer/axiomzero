@@ -1,9 +1,10 @@
 import {
   createPublicClient,
   formatEther,
-  http,
 } from "viem";
 import { arbitrum } from "viem/chains";
+
+import { getArbitrumRpcTransport } from "@/lib/web3/arbitrum-transport";
 
 import { marketplaceAbi } from "@/lib/web3/abis";
 import type {
@@ -80,16 +81,16 @@ type FetchCollectionOffersOptions = FetchOffersOptions & {
 function createMarketplacePublicClient(): MarketplaceClient {
   return createPublicClient({
     chain: arbitrum,
-    transport: http(
-      process.env.ARBITRUM_RPC_URL ??
-        process.env.NEXT_PUBLIC_ARBITRUM_RPC_URL ??
-        "https://arb1.arbitrum.io/rpc",
-      // Batching coalesces the multicall chunks of a full offer scan into a
-      // few HTTP requests, which keeps rate-limited public RPCs from dropping
-      // parts of the scan. Timeouts keep server renders bounded; callers fall
-      // back to cached or empty market data.
-      { batch: true, timeout: 5_000, retryCount: 1 },
-    ),
+    // Batching coalesces the multicall chunks of a full offer scan into a
+    // few HTTP requests, which keeps rate-limited public RPCs from dropping
+    // parts of the scan. Timeouts keep server renders bounded; callers fall
+    // back to cached or empty market data. The transport rotates hourly
+    // between the configured RPC servers with failover.
+    transport: getArbitrumRpcTransport({
+      batch: true,
+      timeout: 5_000,
+      retryCount: 1,
+    }),
   }) as unknown as MarketplaceClient;
 }
 

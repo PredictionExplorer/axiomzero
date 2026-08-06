@@ -10,18 +10,16 @@ import type {
 import { participantAddress, ZERO_ADDRESS } from "@/lib/marketplace/eth";
 import { fetchGoApiJson } from "@/lib/marketplace/go-api";
 import { logMarketplaceDegradation } from "@/lib/marketplace/log";
+import { getRandomWalkApiBase } from "@/lib/server-rotation";
 
 /**
  * Random Walk data comes straight from the collection's Go backend (the same
  * API that powers randomwalknft.com): `tokens/info` for current ownership and
  * `tokens/history` for full provenance. Media URLs are deterministic per
- * token id on the same host.
+ * token id on the same host. The API host comes from the hourly server
+ * rotation (`server-rotation.ts`) with retry-once failover on the JSON calls.
  */
 
-const RANDOM_WALK_API_URL =
-  process.env.RANDOM_WALK_API_URL ??
-  process.env.NEXT_PUBLIC_RANDOM_WALK_API_URL ??
-  "https://api.randomwalknft.com:1443";
 const RANDOM_WALK_METADATA_URL =
   process.env.RANDOM_WALK_METADATA_URL ??
   process.env.NEXT_PUBLIC_RANDOM_WALK_METADATA_URL ??
@@ -94,13 +92,13 @@ function formatRandomWalkName(tokenId: number) {
 }
 
 export function randomWalkApiPath(path: string) {
-  return `${RANDOM_WALK_API_URL}/api/randomwalk/${path}`;
+  return `${getRandomWalkApiBase()}/api/randomwalk/${path}`;
 }
 
 /** Full media set served by the Random Walk backend, keyed by token id. */
 export function randomWalkAssets(tokenId: number): Required<TokenMediaAssets> {
   const fileName = String(tokenId).padStart(6, "0");
-  const base = `${RANDOM_WALK_API_URL}/images/randomwalk/${fileName}`;
+  const base = `${getRandomWalkApiBase()}/images/randomwalk/${fileName}`;
 
   return {
     blackImage: `${base}_black.png`,

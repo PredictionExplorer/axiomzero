@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+import {
+  failoverUrl,
+  getCosmicSignatureApiUrls,
+  getRandomWalkApiUrls,
+} from "@/lib/server-rotation";
+
 /**
  * Shared client for the PredictionExplorer Go "webserv" JSON APIs that back
  * randomwalknft.com and cosmicsignature.com. Every JSON response carries an
@@ -50,24 +56,22 @@ type FetchGoApiJsonOptions = {
   noStore?: boolean;
 };
 
-export async function fetchGoApiJson<Schema extends z.ZodType>(
+async function fetchGoApiJsonOnce<Schema extends z.ZodType>(
   url: string,
   schema: Schema,
-  {
-    revalidate = DEFAULT_REVALIDATE_SECONDS,
-    timeoutMs = DEFAULT_TIMEOUT_MS,
-    noStore = false,
-  }: FetchGoApiJsonOptions = {},
+  options: { revalidate: number; timeoutMs: number; noStore: boolean },
 ): Promise<z.infer<Schema>> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs);
   let response: Response;
 
   try {
     response = await fetch(url, {
       headers: { Accept: "application/json" },
       signal: controller.signal,
-      ...(noStore ? { cache: "no-store" } : { next: { revalidate } }),
+      ...(options.noStore
+        ? { cache: "no-store" }
+        : { next: { revalidate: options.revalidate } }),
     });
   } finally {
     clearTimeout(timeout);
@@ -90,4 +94,65 @@ export async function fetchGoApiJson<Schema extends z.ZodType>(
   }
 
   return schema.parse(payload);
+}
+
+/** Server-side failures worth retrying on another server; 4xx and schema mismatches are not. */
+function isRetryableGoApiFailure(error: unknown): boolean {
+  if (error instanceof GoApiError) {
+    return (error.httpStatus ?? 0) >= 500;
+  }
+  if (error instanceof z.ZodError) {
+    return false;
+  }
+  // Transport-level failures: fetch TypeError, undici errors, timeout aborts.
+  return true;
+}
+
+/**
+ * Rotation-aware retry target for a failed request (see `server-rotation.ts`).
+ * The URL is matched against the rotation group it was built from (Random
+ * Walk or Cosmic Signature); the failed server is marked down and the request
+ * is rebuilt against the next healthy server of the same group. Null when the
+ * URL is outside both groups (e.g. the static metadata host) or no
+ * alternative server is configured.
+ */
+export function goApiFailoverUrl(url: string): string | null {
+  // The Cosmic Signature group is checked first for /api/cosmicgame/ URLs:
+  // the same host could appear in both rotation lists (e.g. a shared staging
+  // server), and base matching alone would then rebase onto the wrong
+  // service's list.
+  const groups = url.includes("/api/cosmicgame/")
+    ? [getCosmicSignatureApiUrls(), getRandomWalkApiUrls()]
+    : [getRandomWalkApiUrls(), getCosmicSignatureApiUrls()];
+  for (const urls of groups) {
+    if (urls.some((base) => url === base || url.startsWith(`${base}/`))) {
+      return failoverUrl(url, urls);
+    }
+  }
+  return null;
+}
+
+export async function fetchGoApiJson<Schema extends z.ZodType>(
+  url: string,
+  schema: Schema,
+  {
+    revalidate = DEFAULT_REVALIDATE_SECONDS,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    noStore = false,
+  }: FetchGoApiJsonOptions = {},
+): Promise<z.infer<Schema>> {
+  const options = { revalidate, timeoutMs, noStore };
+
+  try {
+    return await fetchGoApiJsonOnce(url, schema, options);
+  } catch (error) {
+    if (!isRetryableGoApiFailure(error)) {
+      throw error;
+    }
+    const retryUrl = goApiFailoverUrl(url);
+    if (!retryUrl) {
+      throw error;
+    }
+    return fetchGoApiJsonOnce(retryUrl, schema, options);
+  }
 }

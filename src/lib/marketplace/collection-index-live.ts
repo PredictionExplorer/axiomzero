@@ -1,6 +1,8 @@
 import { cache } from "react";
-import { createPublicClient, http } from "viem";
+import { createPublicClient } from "viem";
 import { arbitrum } from "viem/chains";
+
+import { getArbitrumRpcTransport } from "@/lib/web3/arbitrum-transport";
 
 import { requireCollection } from "@/config/collections";
 import { fetchCosmicSignatureTokenIds } from "@/lib/marketplace/cosmic-signature-live";
@@ -48,16 +50,16 @@ type FetchCollectionTokenUriOptions = {
 function createErc721PublicClient(): Erc721IndexClient {
   return createPublicClient({
     chain: arbitrum,
-    transport: http(
-      process.env.ARBITRUM_RPC_URL ??
-        process.env.NEXT_PUBLIC_ARBITRUM_RPC_URL ??
-        "https://arb1.arbitrum.io/rpc",
-      // Batching folds the tokenByIndex multicall chunks into a few HTTP
-      // requests so rate-limited public RPCs do not drop the scan. Timeouts
-      // keep server renders bounded; token id reads fall back to configured
-      // ranges.
-      { batch: true, timeout: 5_000, retryCount: 1 },
-    ),
+    // Batching folds the tokenByIndex multicall chunks into a few HTTP
+    // requests so rate-limited public RPCs do not drop the scan. Timeouts
+    // keep server renders bounded; token id reads fall back to configured
+    // ranges. The transport rotates hourly between the configured RPC
+    // servers and fails over on errors (see server-rotation.ts).
+    transport: getArbitrumRpcTransport({
+      batch: true,
+      timeout: 5_000,
+      retryCount: 1,
+    }),
   }) as unknown as Erc721IndexClient;
 }
 

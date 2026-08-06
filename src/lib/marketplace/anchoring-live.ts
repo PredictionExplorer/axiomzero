@@ -1,5 +1,7 @@
-import { createPublicClient, http } from "viem";
+import { createPublicClient } from "viem";
 import { arbitrum } from "viem/chains";
+
+import { getArbitrumRpcTransport } from "@/lib/web3/arbitrum-transport";
 
 import { requireCollection } from "@/config/collections";
 import { getCollectionTokenIds } from "@/lib/marketplace/collection-index-live";
@@ -40,14 +42,11 @@ export type TokenRef = {
 function createAnchoringPublicClient(): AnchoringClient {
   return createPublicClient({
     chain: arbitrum,
-    transport: http(
-      process.env.ARBITRUM_RPC_URL ??
-        process.env.NEXT_PUBLIC_ARBITRUM_RPC_URL ??
-        "https://arb1.arbitrum.io/rpc",
-      // Keep server renders bounded when the public RPC is slow or
-      // rate-limited; anchor statuses degrade to "unknown" instead of failing.
-      { timeout: 5_000, retryCount: 1 },
-    ),
+    // Keep server renders bounded when the public RPC is slow or
+    // rate-limited; anchor statuses degrade to "unknown" instead of failing.
+    // The transport rotates hourly between the configured RPC servers with
+    // failover.
+    transport: getArbitrumRpcTransport({ timeout: 5_000, retryCount: 1 }),
   }) as unknown as AnchoringClient;
 }
 
