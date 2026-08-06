@@ -15,7 +15,6 @@ import { fetchGoApiJson } from "@/lib/marketplace/go-api";
 import { logMarketplaceDegradation } from "@/lib/marketplace/log";
 import { getCosmicSignatureApiBase } from "@/lib/server-rotation";
 
-const COSMIC_SIGNATURE_NFT_API_URL = "https://nfts.cosmicsignature.com";
 const COSMIC_SIGNATURE_APP_URL = "https://app.cosmicsignature.com";
 const COSMIC_SIGNATURE_REFRESH_SECONDS = 60;
 const COSMIC_SIGNATURE_TIMEOUT_MS = 8_000;
@@ -187,20 +186,24 @@ function mintedAtFromMetadata(metadata: CosmicSignatureMetadata) {
     : undefined;
 }
 
+// Media (images, videos, metadata) is served by the same rotated servers as
+// the Go API, so URLs are built against the current rotation pick instead of
+// the legacy single-server nfts.cosmicsignature.com host (which stays
+// reserved for on-chain tokenURI / third-party marketplaces).
 export function cosmicSignatureImageUrl(seed: string) {
-  return `${COSMIC_SIGNATURE_NFT_API_URL}/images/new/cosmicsignature/0x${normalizeSeed(
+  return `${getCosmicSignatureApiBase()}/images/new/cosmicsignature/0x${normalizeSeed(
     seed,
   )}.png`;
 }
 
 export function cosmicSignatureThumbUrl(seed: string, theme = "black") {
-  return `${COSMIC_SIGNATURE_NFT_API_URL}/images/new/cosmicsignature/0x${normalizeSeed(
+  return `${getCosmicSignatureApiBase()}/images/new/cosmicsignature/0x${normalizeSeed(
     seed,
   )}/thumb_${theme}.webp`;
 }
 
 function cosmicSignatureVideoUrl(seed: string) {
-  return `${COSMIC_SIGNATURE_NFT_API_URL}/images/new/cosmicsignature/0x${normalizeSeed(
+  return `${getCosmicSignatureApiBase()}/images/new/cosmicsignature/0x${normalizeSeed(
     seed,
   )}.mp4`;
 }
@@ -324,7 +327,7 @@ async function fetchCosmicSignatureAppMetadata(tokenId: number) {
 export async function fetchCosmicSignatureMetadata(tokenId: number) {
   try {
     const response = await fetchWithTimeout(
-      `${COSMIC_SIGNATURE_NFT_API_URL}/metadata/${tokenId}`,
+      `${getCosmicSignatureApiBase()}/metadata/${tokenId}`,
       { next: { revalidate: COSMIC_SIGNATURE_REFRESH_SECONDS } },
     );
 

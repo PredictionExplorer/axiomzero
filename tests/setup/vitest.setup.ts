@@ -1,5 +1,24 @@
 import "@testing-library/jest-dom/vitest";
 
+// Hermetic server-rotation config (src/lib/server-rotation.ts). The Cosmic
+// Signature production default is a two-server rotation list (a1/a2), which
+// would make URL-building assertions depend on the wall-clock hour; tests pin
+// a single fixture host instead. Plural lists are removed so shell-exported
+// deployment values cannot leak into the suite. Tests that exercise rotation
+// stub their own lists and call __resetServerRotation().
+process.env.COSMIC_SIGNATURE_API_URL = "https://nfts.cosmicsignature.com";
+delete process.env.COSMIC_SIGNATURE_API_URLS;
+delete process.env.NEXT_PUBLIC_COSMIC_SIGNATURE_API_URLS;
+delete process.env.NEXT_PUBLIC_COSMIC_SIGNATURE_API_URL;
+delete process.env.RANDOM_WALK_API_URLS;
+delete process.env.NEXT_PUBLIC_RANDOM_WALK_API_URLS;
+delete process.env.RANDOM_WALK_API_URL;
+delete process.env.NEXT_PUBLIC_RANDOM_WALK_API_URL;
+delete process.env.ARBITRUM_RPC_URLS;
+delete process.env.NEXT_PUBLIC_ARBITRUM_RPC_URLS;
+delete process.env.ARBITRUM_RPC_URL;
+delete process.env.NEXT_PUBLIC_ARBITRUM_RPC_URL;
+
 type ObserverRecord = {
   callback: IntersectionObserverCallback;
   observer: IntersectionObserver;

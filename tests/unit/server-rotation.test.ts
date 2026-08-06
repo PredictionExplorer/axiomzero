@@ -67,13 +67,20 @@ describe("parseUrlList", () => {
 });
 
 describe("env URL lists", () => {
-  it("defaults to the hardcoded single-server lists", () => {
+  it("defaults to the hardcoded lists", () => {
+    // vitest.setup.ts pins COSMIC_SIGNATURE_API_URL for the rest of the
+    // suite; clear it here to observe the real hardcoded default.
+    vi.stubEnv("COSMIC_SIGNATURE_API_URL", "");
+    __resetServerRotation();
+
     expect(getArbitrumRpcUrls()).toEqual(["https://arb1.arbitrum.io/rpc"]);
     expect(getRandomWalkApiUrls()).toEqual([
       "https://api.randomwalknft.com:1443",
     ]);
+    // Both servers serve the Go API and the NFT media (a1/a2 rotation).
     expect(getCosmicSignatureApiUrls()).toEqual([
-      "https://nfts.cosmicsignature.com",
+      "https://a1.cosmicsignature.com",
+      "https://a2.cosmicsignature.com",
     ]);
   });
 
@@ -91,6 +98,9 @@ describe("env URL lists", () => {
   it("falls back to the singular vars as one-element lists", () => {
     vi.stubEnv("NEXT_PUBLIC_ARBITRUM_RPC_URL", `${C}/`);
     vi.stubEnv("RANDOM_WALK_API_URL", A);
+    // Clear the value pinned by vitest.setup.ts so the NEXT_PUBLIC_ singular
+    // (lower precedence) is what resolves.
+    vi.stubEnv("COSMIC_SIGNATURE_API_URL", "");
     vi.stubEnv("NEXT_PUBLIC_COSMIC_SIGNATURE_API_URL", B);
     __resetServerRotation();
 

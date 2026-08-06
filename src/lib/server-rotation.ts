@@ -98,7 +98,9 @@ export function getCosmicSignatureApiUrls(): string[] {
       process.env.NEXT_PUBLIC_COSMIC_SIGNATURE_API_URLS,
       process.env.COSMIC_SIGNATURE_API_URL,
       process.env.NEXT_PUBLIC_COSMIC_SIGNATURE_API_URL,
-      "https://nfts.cosmicsignature.com",
+      // Both servers serve the Go API and the NFT media; the legacy
+      // nfts.cosmicsignature.com host stays reserved for on-chain tokenURI.
+      "https://a1.cosmicsignature.com,https://a2.cosmicsignature.com",
     ),
   );
 }
